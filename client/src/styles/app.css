@@ -61,6 +61,129 @@
   color: #5a6575;
 }
 
+/* Room list */
+.room-list {
+  width: 100%;
+  max-width: 500px;
+  margin-top: 12px;
+}
+
+.room-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.room-list-header h2 {
+  font-size: 18px;
+  color: #c8d0e0;
+}
+
+.room-list-header button {
+  padding: 6px 16px;
+  border: 1px solid #3a4555;
+  border-radius: 6px;
+  background: #1e2530;
+  color: #c8d0e0;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.room-list-header button:hover {
+  background: #2a3040;
+  border-color: #5a6575;
+}
+
+.room-list ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.room-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: #1a2030;
+  border: 1px solid #2a3545;
+  border-radius: 8px;
+  transition: border-color 0.2s;
+}
+
+.room-item:hover {
+  border-color: #3a5060;
+}
+
+.room-game {
+  font-weight: 600;
+  color: #c8d0e0;
+  min-width: 60px;
+}
+
+.room-players {
+  font-size: 13px;
+  color: #8a90a0;
+  min-width: 40px;
+}
+
+.room-phase {
+  font-size: 12px;
+  color: #5a6575;
+  padding: 2px 8px;
+  background: #1e2530;
+  border-radius: 4px;
+}
+
+.room-item button {
+  margin-left: auto;
+  padding: 6px 18px;
+  border: 1px solid #4a80c0;
+  border-radius: 6px;
+  background: #2a4060;
+  color: #c8d0e0;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.room-item button:hover {
+  background: #3a5070;
+}
+
+.no-rooms {
+  color: #5a6575;
+  font-size: 14px;
+  text-align: center;
+  padding: 24px 0;
+}
+
+/* Game room top bar */
+.game-room-top-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: 8px;
+}
+
+.game-leave-btn {
+  padding: 6px 16px;
+  border: 1px solid #5a3030;
+  border-radius: 6px;
+  background: #302020;
+  color: #cc8888;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.game-leave-btn:hover {
+  background: #402828;
+  border-color: #8a4040;
+}
+
 /* Waiting room */
 .waiting-room {
   display: flex;
@@ -125,4 +248,140 @@
 
 .back-link:hover {
   color: #8a90a0;
+}
+
+/* Room page */
+.room-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 16px;
+  padding: 24px;
+}
+
+.room-page h2 {
+  color: #c8d0e0;
+  font-size: 24px;
+}
+
+.room-game-id {
+  font-size: 14px;
+  color: #6a7080;
+}
+
+.room-player-list {
+  width: 100%;
+  max-width: 400px;
+  background: #1a2030;
+  border: 1px solid #2a3545;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.room-player-list h3 {
+  font-size: 16px;
+  color: #c8d0e0;
+  margin-bottom: 12px;
+}
+
+.room-player-list ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.room-player-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #1e2530;
+  border-radius: 6px;
+}
+
+.room-player-item.disconnected {
+  opacity: 0.6;
+}
+
+.player-name {
+  font-size: 14px;
+  color: #c8d0e0;
+}
+
+.player-status {
+  font-size: 13px;
+  color: #8a90a0;
+}
+
+.room-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 280px;
+  margin-top: 16px;
+}
+
+.ready-btn {
+  padding: 12px 24px;
+  border: 1px solid #4a80c0;
+  border-radius: 8px;
+  background: #2a4060;
+  color: #c8d0e0;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.ready-btn:hover {
+  background: #3a5070;
+}
+
+.start-btn {
+  padding: 12px 24px;
+  border: 1px solid #4a80c0;
+  border-radius: 8px;
+  background: #2a6040;
+  color: #c8d0e0;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.start-btn:hover:not(:disabled) {
+  background: #3a7050;
+}
+
+.start-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Game selector */
+.game-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.game-selector label {
+  font-size: 14px;
+  color: #c8d0e0;
+}
+
+.game-selector select {
+  padding: 8px 12px;
+  border: 1px solid #3a4555;
+  border-radius: 6px;
+  background: #1e2530;
+  color: #c8d0e0;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.game-selector select:hover {
+  border-color: #5a6575;
 }

@@ -8,12 +8,31 @@ registerClientPluginLoader('huiming', () =>
   import('huiming/ui/client-plugin').then(m => m.huimingClientPlugin)
 )
 
-type AppPhase = 'connect' | 'lobby' | 'waiting' | 'playing' | 'paused' | 'ended'
+function getStoredPlayerId(): string {
+  let id = localStorage.getItem('huiming-player-id')
+  if (!id) { id = crypto.randomUUID(); localStorage.setItem('huiming-player-id', id) }
+  return id
+}
+function getStoredPlayerName(): string {
+  return localStorage.getItem('huiming-player-name') || 'Player'
+}
+
+type AppPhase = 'connect' | 'lobby' | 'room' | 'playing' | 'paused' | 'ended'
+
+/** All room-related state, always updated as a single unit from server events. */
+interface RoomView {
+  roomId: string
+  gameId: string
+  isHost: boolean
+  players: { id: string; name: string; connected: boolean; ready: boolean }[]
+}
+
+const EMPTY_ROOM: RoomView = { roomId: '', gameId: '', isHost: false, players: [] }
 
 export function App() {
-  const { emit, on, playerId, connected, serverUrl, connect, disconnect, serverHistory } = useSocket()
+  const { emit, on, playerId, connected, serverUrl, connectError, connect, disconnect, serverHistory } = useSocket()
   const [phase, setPhase] = useState<AppPhase>('connect')
-  const [roomId, setRoomId] = useState<string>('')
+  const [room, setRoom] = useState<RoomView>(EMPTY_ROOM)
   const [games, setGames] = useState<string[]>([])
   const [rooms, setRooms] = useState<RoomSummary[]>([])
   const [gameState, setGameState] = useState<ClientState | null>(null)
@@ -21,9 +40,10 @@ export function App() {
   const [error, setError] = useState<string | null>(null)
   const [winnerId, setWinnerId] = useState<string | null>(null)
   const [serverInput, setServerInput] = useState('')
-  const [currentGameId, setCurrentGameId] = useState<string | null>(null)
+  const [selectedGameId, setSelectedGameId] = useState<string>('huiming')
   const stateVersionRef = useRef(0)
-  const gamePlugin = useGamePlugin(currentGameId || '')
+  const pendingRetryRef = useRef<{ event: string; payload: any } | null>(null)
+  const gamePlugin = useGamePlugin(room.gameId)
 
   // Listen for events
   useEffect(() => {
@@ -33,18 +53,34 @@ export function App() {
       on('player:welcome', ({ playerId: pid, games: gameList }: { playerId: string; games: string[] }) => {
         setGames(gameList)
         setPhase('lobby')
+        // If there's a pending action from a NEED_HELLO retry, execute it now.
+        const pending = pendingRetryRef.current
+        if (pending) {
+          pendingRetryRef.current = null
+          setTimeout(() => emit(pending.event, pending.payload), 100)
+        }
       }),
       on('rooms:list', (roomList: RoomSummary[]) => {
         setRooms(roomList)
       }),
-      on('room:created', ({ roomId: rid }: { roomId: string }) => {
-        setRoomId(rid)
-        setPhase('waiting')
+      on('room:created', (data: { roomId: string; gameId: string; hostId: string; playerList: { id: string; name: string; connected: boolean; ready: boolean }[]; isHost: boolean }) => {
+        pendingRetryRef.current = null
+        setRoom({ roomId: data.roomId, gameId: data.gameId, isHost: data.isHost, players: data.playerList })
+        setPhase('room')
       }),
-      on('room:joined', () => {
-        setPhase('playing')
+      on('room:joined', (data: { gameId: string; playerList: { id: string; name: string; connected: boolean; ready: boolean }[]; isHost: boolean; roomId: string }) => {
+        pendingRetryRef.current = null
+        setRoom({ roomId: data.roomId, gameId: data.gameId, isHost: data.isHost, players: data.playerList })
+        setPhase('room')
       }),
-      on('game:stateUpdate', ({ state, version }: { state: ClientState; version?: number }) => {
+      on('room:updated', (data: { roomId: string; gameId: string; playerList: { id: string; name: string; connected: boolean; ready: boolean }[]; isHost: boolean }) => {
+        setRoom({ roomId: data.roomId, gameId: data.gameId, isHost: data.isHost, players: data.playerList })
+        // On reconnect back to a waiting room, route back to the room page.
+        if (phase === 'connect' || phase === 'lobby') {
+          setPhase('room')
+        }
+      }),
+      on('game:stateUpdate', ({ state, version, gameId }: { state: ClientState; version?: number; gameId?: string }) => {
         // Ignore older versions
         if (version !== undefined && version < stateVersionRef.current) {
           return
@@ -52,6 +88,11 @@ export function App() {
         setGameState(state)
         if (version !== undefined) {
           stateVersionRef.current = version
+        }
+        // On a reconnect (or join-link) the client may not have set the gameId
+        // yet, so derive it from the update to load the right plugin.
+        if (gameId) {
+          setRoom(prev => ({ ...prev, gameId }))
         }
         if (phase !== 'paused') {
           setPhase('playing')
@@ -61,7 +102,24 @@ export function App() {
         setError(reason)
         setTimeout(() => setError(null), 3000)
       }),
-      on('room:error', ({ reason }: { reason: string }) => {
+      on('game:opponentDisconnected', () => {
+        setError('对手已断开连接，等待重连…')
+        setTimeout(() => setError(null), 5000)
+      }),
+      on('room:error', ({ reason, code }: { reason: string; code?: string }) => {
+        if (code === 'NEED_HELLO') {
+          // Socket mapping lost (e.g. tunnel reconnect). Re-handshake and
+          // queue the last action to retry after welcome arrives.
+          const pending = pendingRetryRef.current
+          if (pending) {
+            emit('player:hello', { playerId: getStoredPlayerId(), name: getStoredPlayerName() })
+            // pending is kept; player:welcome handler will retry it.
+          } else {
+            setError('连接已重置，请重新操作')
+            setTimeout(() => setError(null), 3000)
+          }
+          return
+        }
         setError(reason)
         setTimeout(() => setError(null), 3000)
       }),
@@ -87,12 +145,20 @@ export function App() {
         setWinnerId(wid)
         setPhase('ended')
       }),
-      on('room:playerLeft', ({ playerId: pid }: { playerId: string }) => {
-        setError('对手已离开房间')
-        setTimeout(() => setError(null), 3000)
-        setPhase('lobby')
-        setRoomId('')
-        setGameState(null)
+      on('room:playerLeft', ({ playerId: pid, isHost: leftWasHost, dissolved }: { playerId: string; isHost: boolean; dissolved?: boolean }) => {
+        if (dissolved) {
+          setError(leftWasHost ? '房主已离开，房间已解散' : '对手已离开，房间已解散')
+          setTimeout(() => setError(null), 3000)
+          setPhase('lobby')
+          setRoom(EMPTY_ROOM)
+          setGameState(null)
+        } else if (leftWasHost) {
+          setError('房主已离开，你已成为新房主')
+          setTimeout(() => setError(null), 3000)
+        } else {
+          setError('对手已离开房间')
+          setTimeout(() => setError(null), 3000)
+        }
       }),
     ]
     return () => cleanups.forEach(fn => fn())
@@ -122,48 +188,48 @@ export function App() {
       const joinRoomId = params.get('join')
       if (joinRoomId) {
         emit('room:join', { roomId: joinRoomId })
-        setRoomId(joinRoomId)
+        setRoom(prev => ({ ...prev, roomId: joinRoomId }))
       }
     }
   }, [connected, phase, emit])
 
   const handleConnect = useCallback((url: string) => {
     if (!url) return
-    // Add protocol if missing
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      url = 'http://' + url
-    }
+    // Protocol normalization + http/https fallback happens inside useSocket.connect.
     connect(url)
   }, [connect])
 
   const handleDisconnect = useCallback(() => {
     disconnect()
     setPhase('connect')
-    setRoomId('')
+    setRoom(EMPTY_ROOM)
     setGameState(null)
     setWinnerId(null)
   }, [disconnect])
 
   const handleCreateRoom = useCallback(() => {
-    emit('room:create', { gameId: 'huiming' })
-    setCurrentGameId('huiming')
-  }, [emit])
+    const payload = { gameId: selectedGameId }
+    pendingRetryRef.current = { event: 'room:create', payload }
+    emit('room:create', payload)
+    setRoom(prev => ({ ...prev, gameId: selectedGameId }))
+  }, [emit, selectedGameId])
 
   const handleJoinRoom = useCallback((rid: string, gameId?: string) => {
-    emit('room:join', { roomId: rid })
-    setRoomId(rid)
+    const payload = { roomId: rid }
+    pendingRetryRef.current = { event: 'room:join', payload }
+    emit('room:join', payload)
     if (gameId) {
-      setCurrentGameId(gameId)
+      setRoom(prev => ({ ...prev, roomId: rid, gameId }))
     }
   }, [emit])
 
   const handleCopyLink = useCallback(() => {
-    const url = `${window.location.origin}?join=${roomId}`
+    const url = `${window.location.origin}?join=${room.roomId}`
     navigator.clipboard.writeText(url).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     })
-  }, [roomId])
+  }, [room.roomId])
 
   const handleAction = useCallback((event: string, payload: any) => {
     emit('game:action', { event, payload })
@@ -172,7 +238,7 @@ export function App() {
   const handleLeaveRoom = useCallback(() => {
     emit('room:leave')
     setPhase('lobby')
-    setRoomId('')
+    setRoom(EMPTY_ROOM)
     setGameState(null)
     setWinnerId(null)
   }, [emit])
@@ -185,6 +251,14 @@ export function App() {
     emit('rooms:refresh')
   }, [emit])
 
+  const handleToggleReady = useCallback(() => {
+    emit('room:ready')
+  }, [emit])
+
+  const handleStartGame = useCallback(() => {
+    emit('room:start')
+  }, [emit])
+
   // Connect phase
   if (phase === 'connect') {
     return (
@@ -193,6 +267,7 @@ export function App() {
         <p className="lobby-subtitle">可插拔的联机卡牌游戏平台</p>
         <div className="connect-panel">
           <h2>连接服务器</h2>
+          {connectError && <div className="error-message">连接失败: {connectError}</div>}
           <div className="connect-input-row">
             <input
               type="text"
@@ -233,15 +308,23 @@ export function App() {
         <p className="lobby-subtitle">已连接: {serverUrl}</p>
         {error && <div className="error-message">{error}</div>}
         <div className="lobby-actions">
+          <div className="game-selector">
+            <label>选择游戏:</label>
+            <select
+              value={selectedGameId}
+              onChange={(e) => setSelectedGameId(e.target.value)}
+            >
+              {games.map((game) => (
+                <option key={game} value={game}>{game}</option>
+              ))}
+            </select>
+          </div>
           <button className="lobby-btn primary" onClick={handleCreateRoom}>
             创建房间
           </button>
           <button className="lobby-btn" onClick={handleDisconnect}>
             断开连接
           </button>
-          {games.length > 0 && (
-            <p className="lobby-game-list">可用游戏: {games.join(', ')}</p>
-          )}
         </div>
         <div className="room-list">
           <div className="room-list-header">
@@ -269,25 +352,57 @@ export function App() {
     )
   }
 
-  // Waiting phase
-  if (phase === 'waiting') {
+  // Room phase
+  if (phase === 'room') {
+    const allReady = room.players.length > 0 && room.players.every(p => p.ready)
     return (
-      <div className="waiting-room">
-        <h2>等待对手加入</h2>
+      <div className="room-page">
+        <h2>房间</h2>
+        <p className="room-game-id">游戏: {room.gameId}</p>
         {error && <div className="error-message">{error}</div>}
         <div className="room-link-box">
           <input
             readOnly
-            value={`${window.location.origin}?join=${roomId}`}
+            value={`${window.location.origin}?join=${room.roomId}`}
           />
           <button onClick={handleCopyLink}>
             {copied ? '已复制' : '复制链接'}
           </button>
         </div>
-        <p className="waiting-dots">等待中...</p>
-        <span className="back-link" onClick={handleLeaveRoom}>
-          返回大厅
-        </span>
+        <div className="room-player-list">
+          <h3>玩家列表</h3>
+          <ul>
+            {room.players.map((p) => (
+              <li key={p.id} className={`room-player-item ${p.connected ? '' : 'disconnected'}`}>
+                <span className="player-name">
+                  {p.name}
+                  {p.id === playerId && ' (你)'}
+                  {room.isHost && p.id === playerId && ' 👑'}
+                </span>
+                <span className="player-status">
+                  {p.ready ? '✅ 准备就绪' : '⏳ 未准备'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="room-actions">
+          <button className="ready-btn" onClick={handleToggleReady}>
+            {room.players.find(p => p.id === playerId)?.ready ? '取消准备' : '准备'}
+          </button>
+          {room.isHost && (
+            <button
+              className="start-btn"
+              onClick={handleStartGame}
+              disabled={!allReady || room.players.length < 2}
+            >
+              开始游戏
+            </button>
+          )}
+          <button className="lobby-btn" onClick={handleLeaveRoom}>
+            退出房间
+          </button>
+        </div>
       </div>
     )
   }
@@ -333,6 +448,11 @@ export function App() {
   return (
     <div className="game-room">
       {error && <div className="error-message">{error}</div>}
+      <div className="game-room-top-bar">
+        <button className="game-leave-btn" onClick={handleLeaveRoom}>
+          退出房间
+        </button>
+      </div>
       <GameComponent
         state={gameState}
         playerId={playerId}

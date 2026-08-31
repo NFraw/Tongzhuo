@@ -7,9 +7,10 @@ interface HuimingBoardProps {
   onCellClick: (row: number, col: number) => void
   interactive: boolean
   darkPickMode: boolean
+  placingMode: boolean
 }
 
-export function HuimingBoard({ state, onCellClick, interactive, darkPickMode }: HuimingBoardProps) {
+export function HuimingBoard({ state, onCellClick, interactive, darkPickMode, placingMode }: HuimingBoardProps) {
   const grid: GridCell[][] = state.board.map(row =>
     row.map(cell => ({ card: cell.card, faceUp: cell.faceUp, exists: cell.exists }))
   )
@@ -22,11 +23,16 @@ export function HuimingBoard({ state, onCellClick, interactive, darkPickMode }: 
       isCellInteractive={(r, c, cell) => {
         if (!interactive) return false
         if (cell.faceUp && cell.card) return true
+        // Any face-down card may be attempted in dark-pick mode; the server
+        // rejects it if it is the (hidden) face-down Joker.
         if (!cell.faceUp && cell.exists && darkPickMode) return true
+        if (!cell.exists && placingMode) return true
         return false
       }}
       isCellHighlighted={(r, c, cell) => {
-        return !cell.faceUp && !!cell.exists && darkPickMode
+        if (!cell.faceUp && !!cell.exists && darkPickMode) return true
+        if (!cell.exists && placingMode) return true
+        return false
       }}
     />
   )

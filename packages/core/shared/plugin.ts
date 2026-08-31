@@ -9,10 +9,17 @@ export interface ClientState {
   [key: string]: any
 }
 
+export interface BroadcastMessage {
+  event: string
+  data: any
+  target?: 'all' | 'others' | 'self'  // 默认 'all'
+}
+
 export interface EventResult {
   state: GameState
-  broadcast: { event: string; data: any }[]
+  broadcast?: BroadcastMessage[]
   error?: string
+  checkEndNow?: boolean  // 是否立即检查游戏结束
 }
 
 export interface GameComponentProps {

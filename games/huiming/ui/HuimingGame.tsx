@@ -30,7 +30,10 @@ export function HuimingGame({ state, playerId, onAction }: GameComponentProps) {
     if (cell.faceUp && cell.card) {
       onAction('take', { row, col })
     }
-    // Dark pick: card exists but face-down, and player has charges
+    // Dark pick: card exists but face-down, and player has charges. Whether it
+    // is a Joker is hidden info (the client sees card:null), so the client may
+    // attempt any face-down card — the server's canTake enforces the
+    // "Joker can only be taken when face-up" rule and rejects the center Joker.
     else if (!cell.faceUp && cell.exists && s.myDarkPickCharges > 0) {
       onAction('darkPick', { row, col })
     }
@@ -53,11 +56,12 @@ export function HuimingGame({ state, playerId, onAction }: GameComponentProps) {
         onCellClick={handleCellClick}
         interactive={isMyTurn && !s.winner}
         darkPickMode={isMyTurn && s.myDarkPickCharges > 0 && !selectedCard}
+        placingMode={!!selectedCard && isMyTurn}
       />
 
       {isMyTurn && s.myDarkPickCharges > 0 && !selectedCard && (
         <div className="huiming-dark-pick-hint">
-          暗取模式 — 点击任意暗牌盲取（剩余 {s.myDarkPickCharges} 次）
+          暗取模式 — 点击暗牌盲取（剩余 {s.myDarkPickCharges} 次）
         </div>
       )}
 

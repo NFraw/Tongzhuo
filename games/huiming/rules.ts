@@ -8,6 +8,8 @@ export function canTake(game: HuimingState, row: number, col: number, playerIdx:
   const cell = game.board[row]?.[col]
   if (!cell?.card) return false
   if (cell.faceUp) return true
+  // Jokers cannot be taken when face-down (dark pick)
+  if (cell.card.suit.toString().startsWith('joker')) return false
   return game.players[playerIdx].darkPickCharges > 0
 }
 

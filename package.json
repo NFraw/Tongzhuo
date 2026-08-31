@@ -5,18 +5,22 @@
     "packages/core/*",
     "games/*",
     "server",
-    "client"
+    "client",
+    "desktop"
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "npm -w server run dev",
     "dev:client": "npm -w client run dev",
-    "build": "npm -w client run build && cp -r client/dist server/public",
+    "build": "npm -w client run build && node -e \"const fs=require('fs');fs.rmSync('server/public',{recursive:true,force:true});fs.cpSync('client/dist','server/public',{recursive:true})\"",
     "server": "npm -w server run start",
+    "desktop": "npm -w desktop run start",
+    "desktop:build": "npm -w client run build && npm -w desktop run build",
     "test": "npm -w @huiming/core-server run test && npm -w huiming run test"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
+    "electron": "^44.0.0",
     "typescript": "^5.7.0"
   }
 }

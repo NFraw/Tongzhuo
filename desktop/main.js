@@ -4,6 +4,13 @@ const path = require('path')
 // Disable hardware acceleration issues on some GPUs
 app.disableHardwareAcceleration()
 
+// The game server is commonly exposed over a self-managed NAT tunnel
+// (cpolar / SakuraFrp / ngrok) that serves TLS with a self-signed certificate.
+// Electron refuses untrusted certs by default, so the desktop client could never
+// reach such a tunnel over https. Disable cert validation so players can connect
+// to their own server via its tunnel domain.
+app.commandLine.appendSwitch('ignore-certificate-errors')
+
 const isDev = process.env.NODE_ENV === 'development'
 let mainWindow = null
 

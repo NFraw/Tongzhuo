@@ -26,7 +26,12 @@ export function PlayingCard({
 }: PlayingCardProps) {
   // No card in this cell at all
   if (!exists && !card) {
-    return <div className={`playing-card card-empty ${className}`} />
+    return (
+      <div
+        className={`playing-card card-empty ${interactive ? 'card-interactive card-highlighted' : ''} ${className}`}
+        onClick={interactive ? onClick : undefined}
+      />
+    )
   }
 
   const symbol = card ? (SUIT_SYMBOLS[card.suit] ?? '?') : ''
