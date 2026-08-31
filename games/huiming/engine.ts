@@ -48,6 +48,7 @@ export function initHuimingGame(p1: string, p2: string): HuimingState {
     phase: 'taking',
     round: 1,
     winner: null,
+    hasTakenThisTurn: false,
   }
 }
 

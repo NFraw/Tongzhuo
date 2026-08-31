@@ -24,6 +24,7 @@ export interface HuimingState {
   phase: 'placing' | 'taking' | 'ended'
   round: number
   winner: string | null
+  hasTakenThisTurn: boolean
 }
 
 export interface HuimingClientState {
@@ -37,4 +38,5 @@ export interface HuimingClientState {
   phase: string
   round: number
   winner: string | null
+  hasTakenThisTurn: boolean
 }

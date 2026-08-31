@@ -37,7 +37,7 @@ export function HuimingGame({ state, playerId, onAction }: GameComponentProps) {
   }
 
   const handleHandClick = (card: Card) => {
-    if (s.myCanPlace && isMyTurn) setSelectedCard(card)
+    if (s.myCanPlace && isMyTurn && !s.hasTakenThisTurn) setSelectedCard(card)
   }
 
   return (
@@ -81,7 +81,7 @@ export function HuimingGame({ state, playerId, onAction }: GameComponentProps) {
         />
         <CardHand
           cards={s.myHand}
-          selectable={s.myCanPlace && isMyTurn && !selectedCard}
+          selectable={s.myCanPlace && isMyTurn && !selectedCard && !s.hasTakenThisTurn}
           onCardClick={handleHandClick}
           selectedId={selectedCard?.id}
         />

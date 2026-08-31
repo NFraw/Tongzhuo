@@ -29,6 +29,7 @@ function getClientState(state: HuimingState, playerId: string): HuimingClientSta
     phase: state.phase,
     round: state.round,
     winner: state.winner,
+    hasTakenThisTurn: state.hasTakenThisTurn,
   }
 }
 
@@ -60,6 +61,7 @@ export const huimingServerPlugin: GameServerPlugin = {
         const { row, col } = payload
         if (!canTake(game, row, col, playerIdx)) return { state, broadcast, error: '不能取这张牌' }
         takeCard(game, playerIdx, row, col)
+        game.hasTakenThisTurn = true
         flipNeighbors(game.board, row, col)
         if (checkAllFaceDown(game.board)) grantDarkPickCharges(game)
         if (checkWinner(game.players[playerIdx])) {
@@ -67,21 +69,25 @@ export const huimingServerPlugin: GameServerPlugin = {
           game.winner = playerId
         } else {
           const remaining = countRemainingCards(game.board)
-          if (remaining <= 1) {
+          if (remaining === 0) {
+            // All cards taken — compare max suit counts
             const p0Max = countMaxSuit(game.players[0].hand)
             const p1Max = countMaxSuit(game.players[1].hand)
             if (p0Max !== p1Max) {
               game.phase = 'ended'
               game.winner = game.players[p0Max > p1Max ? 0 : 1].id
             } else {
+              // Tie — enter renewal round
               game.round++
               game.currentTurn = 1 - game.currentTurn as 0 | 1
               game.phase = 'placing'
+              game.hasTakenThisTurn = false
               game.players[0].canPlace = true
               game.players[1].canPlace = true
             }
           } else {
             game.currentTurn = 1 - game.currentTurn as 0 | 1
+            game.hasTakenThisTurn = false
           }
         }
         break
@@ -91,6 +97,7 @@ export const huimingServerPlugin: GameServerPlugin = {
         const { row, col } = payload
         if (!canTake(game, row, col, playerIdx)) return { state, broadcast, error: '不能取这张牌' }
         takeCard(game, playerIdx, row, col)
+        game.hasTakenThisTurn = true
         flipNeighbors(game.board, row, col)
         if (checkAllFaceDown(game.board)) grantDarkPickCharges(game)
         if (checkWinner(game.players[playerIdx])) {
@@ -98,23 +105,26 @@ export const huimingServerPlugin: GameServerPlugin = {
           game.winner = playerId
         } else {
           game.currentTurn = 1 - game.currentTurn as 0 | 1
+          game.hasTakenThisTurn = false
         }
         break
       }
       case 'place': {
         const { cardId, row, col, faceUp } = payload
         if (game.phase === 'placing') {
+          // Renewal round: players place cards back onto the board
           if (!canPlace(game, playerIdx)) return { state, broadcast, error: '不能放牌' }
           placeCard(game, playerIdx, cardId, row, col, faceUp)
           let hasEmpty = false
           for (const r of game.board) { for (const cell of r) { if (!cell.card) hasEmpty = true } }
           if (!hasEmpty) {
             game.phase = 'taking'
-            game.players[0].canPlace = true
-            game.players[1].canPlace = true
+            game.hasTakenThisTurn = false
           }
           game.currentTurn = 1 - game.currentTurn as 0 | 1
         } else if (game.phase === 'taking') {
+          // Rule 6: can only place BEFORE taking, not after
+          if (game.hasTakenThisTurn) return { state, broadcast, error: '已取牌，本回合不能再放牌（规则：先放牌再拿牌）' }
           if (!canPlace(game, playerIdx)) return { state, broadcast, error: '不能放牌' }
           placeCard(game, playerIdx, cardId, row, col, faceUp)
         }
