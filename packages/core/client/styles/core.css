@@ -1,0 +1,121 @@
+/* packages/core/client/styles/core.css */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #141820;
+  color: #c8d0e0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  min-height: 100vh;
+}
+
+/* PlayingCard */
+.playing-card {
+  aspect-ratio: 3/4;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+  user-select: none;
+}
+
+.card-back {
+  background: linear-gradient(145deg, #2a3040, #1e2430);
+  border: 1.5px solid #3a4555;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.card-face {
+  background: linear-gradient(145deg, #f8f6f0, #eae6da);
+  border: 1.5px solid #d0c8b0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.card-empty {
+  background: transparent;
+  border: 1.5px dashed #3a4555;
+}
+
+.card-interactive { cursor: pointer; }
+.card-interactive:hover {
+  transform: translateY(-4px) scale(1.05);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+.card-highlighted {
+  border-color: #e5c07b;
+  box-shadow: 0 0 12px rgba(229,192,123,0.3);
+}
+
+.card-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.card-suit { font-size: 24px; }
+.card-rank { font-size: 14px; font-weight: 700; color: #333; }
+.card-back-pattern { font-size: 20px; opacity: 0.3; color: #8a90a0; }
+
+/* CardGrid */
+.card-grid {
+  display: grid;
+  gap: 8px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+/* CardHand */
+.card-hand {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.hand-empty { color: #4a5060; font-size: 14px; }
+
+/* PlayerInfo */
+.player-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #1a2030;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #8a90a0;
+}
+
+.turn-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #4a5060;
+}
+
+.turn-dot.active {
+  background: #4a4;
+  box-shadow: 0 0 6px #4a4;
+}
+
+/* GameRoom */
+.game-room {
+  width: 100%;
+  max-width: 600px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 16px;
+  margin: 0 auto;
+}
+
+.game-room-disconnected {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  color: #6a7080;
+}
