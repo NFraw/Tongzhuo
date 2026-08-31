@@ -1,0 +1,21 @@
+{
+  "name": "huiming-desktop",
+  "version": "1.1.0",
+  "description": "晦明 - 卡牌游戏平台桌面版",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "cross-env NODE_ENV=development electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "@huiming/core-server": "*",
+    "huiming": "*",
+    "electron": "^35.0.0",
+    "electron-builder": "^26.0.0",
+    "cross-env": "^7.0.3"
+  }
+}
