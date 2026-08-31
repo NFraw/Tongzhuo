@@ -3,34 +3,35 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 12px;
+  gap: 12px;
+  padding: 16px;
   background: #1a2030;
-  border-radius: 10px;
+  border-radius: 12px;
 }
 
 .huiming-place-controls {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 13px;
+  gap: 16px;
+  font-size: 14px;
   color: #8a90a0;
 }
 
 .huiming-place-controls label {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   cursor: pointer;
 }
 
 .huiming-place-controls button {
-  padding: 4px 12px;
+  padding: 6px 16px;
   background: #2a3040;
   border: 1px solid #3a4555;
   border-radius: 6px;
   color: #c8d0e0;
   cursor: pointer;
+  font-size: 14px;
 }
 
 .huiming-game-over {
@@ -44,6 +45,6 @@
 }
 
 .huiming-game-over h2 {
-  font-size: 48px;
+  font-size: 56px;
   color: #e5c07b;
 }
