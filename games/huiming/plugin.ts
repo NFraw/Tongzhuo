@@ -104,20 +104,52 @@ export const huimingServerPlugin: GameServerPlugin = {
           game.phase = 'ended'
           game.winner = playerId
         } else {
-          game.currentTurn = 1 - game.currentTurn as 0 | 1
-          game.hasTakenThisTurn = false
+          const remaining = countRemainingCards(game.board)
+          if (remaining === 0) {
+            const p0Max = countMaxSuit(game.players[0].hand)
+            const p1Max = countMaxSuit(game.players[1].hand)
+            if (p0Max !== p1Max) {
+              game.phase = 'ended'
+              game.winner = game.players[p0Max > p1Max ? 0 : 1].id
+            } else {
+              game.round++
+              game.currentTurn = 1 - game.currentTurn as 0 | 1
+              game.phase = 'placing'
+              game.hasTakenThisTurn = false
+              game.players[0].canPlace = true
+              game.players[1].canPlace = true
+            }
+          } else {
+            game.currentTurn = 1 - game.currentTurn as 0 | 1
+            game.hasTakenThisTurn = false
+          }
         }
         break
       }
       case 'place': {
         const { cardId, row, col, faceUp } = payload
         if (game.phase === 'placing') {
-          // Renewal round: players place cards back onto the board
-          if (!canPlace(game, playerIdx)) return { state, broadcast, error: '不能放牌' }
+          // Renewal round: players place cards back onto the board.
+          // If the current player can't place (already used this round),
+          // skip their turn — but if the next player also can't place,
+          // transition to taking so the game doesn't get stuck.
+          if (!canPlace(game, playerIdx)) {
+            const nextIdx = (1 - playerIdx) as 0 | 1
+            if (!canPlace(game, nextIdx)) {
+              game.phase = 'taking'
+              game.hasTakenThisTurn = false
+            }
+            game.currentTurn = nextIdx
+            break
+          }
           placeCard(game, playerIdx, cardId, row, col, faceUp)
           let hasEmpty = false
           for (const r of game.board) { for (const cell of r) { if (!cell.card) hasEmpty = true } }
-          if (!hasEmpty) {
+          if (!hasEmpty || !canPlace(game, (1 - playerIdx) as 0 | 1)) {
+            // Board full, or the other player can't place either → resume taking.
+            // The turn was already switched by the taking-phase path above (via
+            // the 1-currentTurn flip), so give it to the player who *didn't*
+            // just place — i.e. the one whose turn it *would* have been.
             game.phase = 'taking'
             game.hasTakenThisTurn = false
           }
