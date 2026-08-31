@@ -11,16 +11,7 @@ export function HuimingGame({ state, playerId, onAction }: GameComponentProps) {
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
   const [placingFaceUp, setPlacingFaceUp] = useState(true)
 
-  // Determine if it's my turn
-  // In client state, currentTurn is 0 or 1 relative to the player array
-  // We need to figure out which index "I" am
-  // Since getClientState sends myHand for "me", we can use a simple heuristic:
-  // The first player to receive state with currentTurn=0 and myHand is player 0
-  // For simplicity, we'll use a flag in state or check against playerId
-  // Actually, the plugin sets currentTurn as 0|1 in the game state.
-  // We need to know which player we are. Let's assume the client knows its index.
-  // For now, we'll use a simplified check.
-  const isMyTurn = s.currentTurn === 0 // This is simplified; real impl would track player index
+  const isMyTurn = s.currentTurn === s.myPlayerIndex
 
   const handleCellClick = (row: number, col: number) => {
     if (s.winner || !isMyTurn) return

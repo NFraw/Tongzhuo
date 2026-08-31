@@ -11,7 +11,7 @@ const HUIMING_DECK_CONFIG = {
 }
 
 function getClientState(state: HuimingState, playerId: string): HuimingClientState {
-  const idx = state.players.findIndex(p => p.id === playerId)
+  const idx = state.players.findIndex(p => p.id === playerId) as 0 | 1
   const me = state.players[idx]
   const opp = state.players[1 - idx]
   return {
@@ -23,6 +23,7 @@ function getClientState(state: HuimingState, playerId: string): HuimingClientSta
     opponentHandCount: opp.hand.length,
     myDarkPickCharges: me.darkPickCharges,
     myCanPlace: me.canPlace,
+    myPlayerIndex: idx,
     currentTurn: state.currentTurn,
     phase: state.phase,
     round: state.round,

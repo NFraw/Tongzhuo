@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
 
 interface UseSocketOptions {
@@ -7,11 +7,13 @@ interface UseSocketOptions {
 
 export function useSocket({ serverUrl }: UseSocketOptions = {}) {
   const socketRef = useRef<Socket | null>(null)
+  const [socketId, setSocketId] = useState<string>('')
 
   useEffect(() => {
     const url = serverUrl || new URLSearchParams(window.location.search).get('server') || window.location.origin
     const socket = io(url, { transports: ['websocket', 'polling'] })
     socketRef.current = socket
+    socket.on('connect', () => setSocketId(socket.id || ''))
     return () => { socket.disconnect() }
   }, [serverUrl])
 
@@ -24,5 +26,5 @@ export function useSocket({ serverUrl }: UseSocketOptions = {}) {
     return () => { socketRef.current?.off(event, handler) }
   }, [])
 
-  return { emit, on, socket: socketRef }
+  return { emit, on, socket: socketRef, socketId }
 }

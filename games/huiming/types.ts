@@ -32,6 +32,7 @@ export interface HuimingClientState {
   opponentHandCount: number
   myDarkPickCharges: number
   myCanPlace: boolean
+  myPlayerIndex: 0 | 1
   currentTurn: 0 | 1
   phase: string
   round: number

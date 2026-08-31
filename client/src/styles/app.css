@@ -1,0 +1,128 @@
+@import '../../../packages/core/client/styles/core.css';
+@import '../../../games/huiming/ui/styles.css';
+
+/* Lobby */
+.lobby {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 24px;
+  padding: 24px;
+}
+
+.lobby h1 {
+  font-size: 36px;
+  color: #e5c07b;
+  font-weight: 700;
+}
+
+.lobby-subtitle {
+  font-size: 14px;
+  color: #6a7080;
+  margin-top: -16px;
+}
+
+.lobby-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 280px;
+}
+
+.lobby-btn {
+  padding: 12px 24px;
+  border: 1px solid #3a4555;
+  border-radius: 8px;
+  background: #1e2530;
+  color: #c8d0e0;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.lobby-btn:hover {
+  background: #2a3040;
+  border-color: #5a6575;
+}
+
+.lobby-btn.primary {
+  background: #2a4060;
+  border-color: #4a80c0;
+}
+
+.lobby-btn.primary:hover {
+  background: #3a5070;
+}
+
+.lobby-game-list {
+  font-size: 13px;
+  color: #5a6575;
+}
+
+/* Waiting room */
+.waiting-room {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 16px;
+  padding: 24px;
+}
+
+.waiting-room h2 {
+  color: #c8d0e0;
+}
+
+.room-link-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #1a2030;
+  border: 1px solid #3a4555;
+  border-radius: 8px;
+}
+
+.room-link-box input {
+  background: transparent;
+  border: none;
+  color: #c8d0e0;
+  font-size: 14px;
+  width: 300px;
+  outline: none;
+}
+
+.room-link-box button {
+  padding: 6px 14px;
+  background: #2a4060;
+  border: 1px solid #4a80c0;
+  border-radius: 6px;
+  color: #c8d0e0;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.waiting-dots {
+  color: #6a7080;
+  font-size: 14px;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+.back-link {
+  color: #5a6575;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.back-link:hover {
+  color: #8a90a0;
+}
