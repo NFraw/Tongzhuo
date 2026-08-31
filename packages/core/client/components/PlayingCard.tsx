@@ -14,6 +14,7 @@ const SUIT_COLORS: Record<string, string> = {
 interface PlayingCardProps {
   card?: Card | null
   faceUp?: boolean
+  exists?: boolean
   onClick?: () => void
   interactive?: boolean
   highlighted?: boolean
@@ -21,21 +22,22 @@ interface PlayingCardProps {
 }
 
 export function PlayingCard({
-  card, faceUp = true, onClick, interactive, highlighted, className = '',
+  card, faceUp = true, exists = true, onClick, interactive, highlighted, className = '',
 }: PlayingCardProps) {
-  if (!card) {
+  // No card in this cell at all
+  if (!exists && !card) {
     return <div className={`playing-card card-empty ${className}`} />
   }
 
-  const symbol = SUIT_SYMBOLS[card.suit] ?? '?'
-  const color = SUIT_COLORS[card.suit] ?? '#888'
+  const symbol = card ? (SUIT_SYMBOLS[card.suit] ?? '?') : ''
+  const color = card ? (SUIT_COLORS[card.suit] ?? '#888') : '#888'
 
   return (
     <div
-      className={`playing-card ${faceUp ? 'card-face' : 'card-back'} ${interactive ? 'card-interactive' : ''} ${highlighted ? 'card-highlighted' : ''} ${className}`}
+      className={`playing-card ${faceUp && card ? 'card-face' : 'card-back'} ${interactive ? 'card-interactive' : ''} ${highlighted ? 'card-highlighted' : ''} ${className}`}
       onClick={interactive ? onClick : undefined}
     >
-      {faceUp ? (
+      {faceUp && card ? (
         <div className="card-content" style={{ color }}>
           <span className="card-suit">{symbol}</span>
           <span className="card-rank">{card.rank}</span>

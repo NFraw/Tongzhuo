@@ -4,6 +4,7 @@ import { PlayingCard } from './PlayingCard'
 export interface GridCell {
   card: Card | null
   faceUp: boolean
+  exists?: boolean
 }
 
 interface CardGridProps {
@@ -29,6 +30,7 @@ export function CardGrid({
             key={`${r}-${c}`}
             card={cell.card}
             faceUp={cell.faceUp}
+            exists={cell.exists ?? true}
             interactive={isCellInteractive?.(r, c, cell)}
             highlighted={isCellHighlighted?.(r, c, cell)}
             onClick={() => onCellClick?.(r, c)}

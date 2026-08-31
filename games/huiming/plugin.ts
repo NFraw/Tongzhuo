@@ -18,6 +18,7 @@ function getClientState(state: HuimingState, playerId: string): HuimingClientSta
     board: state.board.map(row => row.map(cell => ({
       card: cell.faceUp ? cell.card : null,
       faceUp: cell.faceUp,
+      exists: cell.card !== null,
     }))),
     myHand: me.hand,
     opponentHandCount: opp.hand.length,

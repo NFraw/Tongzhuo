@@ -11,7 +11,7 @@ interface HuimingBoardProps {
 
 export function HuimingBoard({ state, onCellClick, interactive, darkPickMode }: HuimingBoardProps) {
   const grid: GridCell[][] = state.board.map(row =>
-    row.map(cell => ({ card: cell.card, faceUp: cell.faceUp }))
+    row.map(cell => ({ card: cell.card, faceUp: cell.faceUp, exists: cell.exists }))
   )
 
   return (
@@ -22,11 +22,11 @@ export function HuimingBoard({ state, onCellClick, interactive, darkPickMode }: 
       isCellInteractive={(r, c, cell) => {
         if (!interactive) return false
         if (cell.faceUp && cell.card) return true
-        if (!cell.faceUp && cell.card && darkPickMode) return true
+        if (!cell.faceUp && cell.exists && darkPickMode) return true
         return false
       }}
       isCellHighlighted={(r, c, cell) => {
-        return !cell.faceUp && !!cell.card && darkPickMode
+        return !cell.faceUp && !!cell.exists && darkPickMode
       }}
     />
   )

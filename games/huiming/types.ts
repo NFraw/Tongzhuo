@@ -27,7 +27,7 @@ export interface HuimingState {
 }
 
 export interface HuimingClientState {
-  board: { card: Card | null; faceUp: boolean }[][]
+  board: { card: Card | null; faceUp: boolean; exists: boolean }[][]
   myHand: Card[]
   opponentHandCount: number
   myDarkPickCharges: number
