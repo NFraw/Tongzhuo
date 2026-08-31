@@ -1,0 +1,263 @@
+/* games/nimmt/ui/styles.css */
+.nimmt-game {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.nimmt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: #1a2030;
+  border: 1px solid #2c3548;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.nimmt-round { font-weight: 700; color: #e5c07b; }
+.nimmt-hint { color: #8a90a0; }
+
+.nimmt-opponents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.nimmt-player {
+  flex: 1 1 150px;
+  background: #1a2030;
+  border: 1px solid #2c3548;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #8a90a0;
+}
+
+.nimmt-player.acting {
+  border-color: #e5c07b;
+  box-shadow: 0 0 10px rgba(229, 192, 123, 0.25);
+}
+
+.nimmt-player-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #c8d0e0;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nimmt-acting-tag {
+  font-size: 11px;
+  color: #e5c07b;
+  background: rgba(229, 192, 123, 0.15);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.nimmt-player-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.nimmt-committed { color: #7fb069; }
+
+.nimmt-table {
+  background: #1a2030;
+  border: 1px solid #2c3548;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nimmt-table-title {
+  text-align: center;
+  font-size: 13px;
+  color: #8a90a0;
+}
+
+.nimmt-table.pickup-open .nimmt-table-title {
+  color: #e5c07b;
+  font-weight: 700;
+}
+
+.nimmt-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nimmt-row-label {
+  width: 52px;
+  font-size: 12px;
+  color: #6a7080;
+  flex-shrink: 0;
+}
+
+.nimmt-row-cards {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 8px;
+  min-height: 42px;
+  flex-wrap: wrap;
+}
+
+.nimmt-row-cards.clickable {
+  cursor: pointer;
+}
+
+.nimmt-row-cards.clickable:hover {
+  outline: 2px solid rgba(229, 192, 123, 0.6);
+  background: rgba(229, 192, 123, 0.08);
+}
+
+/* Card */
+.nimmt-card {
+  width: 54px;
+  aspect-ratio: 3/4;
+  border-radius: 7px;
+  background: linear-gradient(145deg, #f8f6f0, #eae6da);
+  border: 1.5px solid #d0c8b0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: #333;
+  user-select: none;
+  transition: transform 0.15s, box-shadow 0.15s;
+  flex-shrink: 0;
+}
+
+.nimmt-card.clickable { cursor: pointer; }
+.nimmt-card.clickable:hover {
+  transform: translateY(-4px) scale(1.05);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+.nimmt-card.selected {
+  border-color: #e5c07b;
+  box-shadow: 0 0 12px rgba(229, 192, 123, 0.4);
+  transform: translateY(-6px);
+}
+
+.nimmt-card.dimmed { opacity: 0.85; }
+.nimmt-card.row-end { border-color: #b8960a; }
+
+.nimmt-card-value {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.nimmt-card-heads {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a5a10;
+}
+
+.nimmt-bull { font-size: 12px; }
+
+/* Recap */
+.nimmt-recap {
+  background: #141820;
+  border: 1px dashed #2c3548;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #6a7080;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* My area */
+.nimmt-my-area {
+  background: #1a2030;
+  border: 1px solid #2c3548;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nimmt-my-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  font-size: 14px;
+  color: #c8d0e0;
+}
+
+.nimmt-waiting { color: #e5c07b; }
+
+.nimmt-my-hand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.nimmt-hand-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.nimmt-committed-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #8a90a0;
+  margin-left: auto;
+}
+
+/* Game over */
+.nimmt-game-over {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 24, 32, 0.92);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  z-index: 100;
+}
+
+.nimmt-game-over h2 {
+  font-size: 52px;
+  color: #e5c07b;
+}
+
+.nimmt-ranking {
+  list-style: none;
+  padding: 0;
+  font-size: 16px;
+  color: #c8d0e0;
+  text-align: left;
+  max-width: 360px;
+}
+
+.nimmt-ranking li { padding: 4px 0; }
+.nimmt-ranking li.winner { color: #e5c07b; font-weight: 700; }
+
+@media (max-width: 480px) {
+  .nimmt-card { width: 44px; }
+  .nimmt-card-value { font-size: 16px; }
+}

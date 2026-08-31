@@ -1,0 +1,537 @@
+/* ===== Landlord Game - Pure CSS Card Layout ===== */
+
+.landlord-game {
+  /* Card size variables - mobile/tablet defaults */
+  --card-w: 72px;
+  --card-h: 100px;
+  --card-font: 30px; /* big center suit symbol */
+  --corner-rank-font: 18px;
+  --corner-suit-font: 15px;
+  --opp-card-w: 40px;
+  --opp-card-h: 56px;
+  --opp-overlap: -20px;
+
+  position: fixed;
+  inset: 0;
+  background: #1a5c2a;
+  background-image: radial-gradient(ellipse at center, #2d7a3a 0%, #1a5c2a 70%);
+  overflow: hidden;
+  user-select: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #fff;
+}
+
+/* ===== Card Shell (pure CSS, no images) ===== */
+.card-shell {
+  position: relative;
+  width: var(--card-w);
+  height: var(--card-h);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  flex-shrink: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.card-face {
+  background: linear-gradient(160deg, #ffffff 0%, #f2f2f2 100%);
+  border: 1.5px solid #d8d8d8;
+}
+
+.card-back {
+  background: linear-gradient(145deg, #234a8f, #16315e);
+  border: 2px solid #2a5090;
+}
+
+.card-clickable {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.card-clickable:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+}
+
+.card-selected {
+  transform: translateY(-18px);
+  box-shadow: 0 0 14px 4px rgba(255, 215, 0, 0.85);
+}
+
+/* Corner rank+suit text */
+.card-corner {
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 0.95;
+  z-index: 2;
+}
+
+.card-corner-rank {
+  font-size: var(--corner-rank-font);
+  font-weight: 800;
+  font-family: 'Georgia', serif;
+}
+
+.card-corner-suit {
+  font-size: var(--corner-suit-font);
+  margin-top: -1px;
+}
+
+/* Center: big suit symbol */
+.card-big-suit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: var(--card-font);
+  font-weight: 700;
+  opacity: 0.92;
+  pointer-events: none;
+  font-family: 'Georgia', serif;
+}
+
+/* Card back pattern */
+.card-back-pattern {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 60%;
+  height: 60%;
+  border: 1px dashed rgba(255,255,255,0.35);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.card-back-star {
+  font-size: calc(var(--card-h) * 0.4);
+  color: rgba(255,255,255,0.4);
+}
+
+/* ===== Top Area: Opponents + Bottom Cards ===== */
+.landlord-top-area {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 16px 24px;
+  height: 30%;
+  min-height: 140px;
+}
+
+/* Opponent */
+.landlord-opponent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 200px;
+}
+
+.landlord-opponent-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0,0,0,0.4);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 14px;
+}
+
+.landlord-opponent-name {
+  font-weight: 600;
+}
+
+.landlord-hand-count {
+  color: #ffd700;
+  font-weight: bold;
+}
+
+.landlord-opponent-cards {
+  display: flex;
+  align-items: center;
+}
+
+.landlord-opponent-cards .card-shell {
+  width: var(--opp-card-w);
+  height: var(--opp-card-h);
+  margin-left: var(--opp-overlap);
+}
+
+.landlord-opponent-cards .card-shell:first-child {
+  margin-left: 0;
+}
+
+/* Bottom cards */
+.landlord-bottom-cards {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.landlord-bottom-label {
+  font-size: 13px;
+  color: rgba(255,255,255,0.7);
+  background: rgba(0,0,0,0.3);
+  padding: 2px 10px;
+  border-radius: 10px;
+}
+
+.landlord-bottom-card-row {
+  display: flex;
+  gap: 4px;
+}
+
+.landlord-bottom-card-row .card-shell {
+  width: calc(var(--card-w) * 0.85);
+  height: calc(var(--card-h) * 0.85);
+}
+
+/* ===== Role Tag ===== */
+.landlord-role-tag {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: bold;
+}
+
+.landlord-role-tag.landlord {
+  background: #ff6b35;
+  color: #fff;
+}
+
+.landlord-role-tag.farmer {
+  background: #4CAF50;
+  color: #fff;
+}
+
+/* ===== Turn Dot ===== */
+.turn-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #555;
+  transition: background 0.3s;
+}
+
+.turn-dot.active {
+  background: #4cff8e;
+  box-shadow: 0 0 8px #4cff8e;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ===== Center Area ===== */
+.landlord-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 35%;
+  gap: 16px;
+  position: relative;
+}
+
+.landlord-multiplier {
+  position: absolute;
+  top: 0;
+  right: 24px;
+  background: rgba(220, 20, 20, 0.85);
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.landlord-last-play {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.landlord-last-play-cards {
+  display: flex;
+  gap: 4px;
+}
+
+.landlord-last-play-cards .card-shell {
+  width: var(--card-w);
+  height: var(--card-h);
+}
+
+.landlord-free-play-hint {
+  font-size: 20px;
+  color: rgba(255,255,255,0.6);
+  font-weight: 300;
+}
+
+/* ===== Bidding ===== */
+.landlord-bidding {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0,0,0,0.5);
+  padding: 16px 24px;
+  border-radius: 12px;
+}
+
+.landlord-bidding-info {
+  font-size: 15px;
+  color: rgba(255,255,255,0.8);
+}
+
+.landlord-bid-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.landlord-bid-btn {
+  padding: 8px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.landlord-bid-btn:hover {
+  transform: translateY(-1px);
+}
+
+.landlord-bid-btn.pass {
+  background: #666;
+  color: #fff;
+}
+
+.landlord-bid-btn.pass:hover {
+  background: #777;
+}
+
+.landlord-bid-btn.score {
+  background: #2196F3;
+  color: #fff;
+}
+
+.landlord-bid-btn.score:hover {
+  background: #42a5f5;
+}
+
+.landlord-bid-btn.score.disabled {
+  background: #444;
+  color: #888;
+  cursor: not-allowed;
+}
+
+.landlord-bid-btn.score.disabled:hover {
+  transform: none;
+  background: #444;
+}
+
+/* ===== Action Buttons ===== */
+.landlord-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.landlord-action-btn {
+  padding: 10px 32px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.landlord-action-btn:hover {
+  transform: translateY(-2px);
+}
+
+.landlord-action-btn.play {
+  background: #4CAF50;
+  color: #fff;
+}
+
+.landlord-action-btn.play:hover {
+  background: #66bb6a;
+}
+
+.landlord-action-btn.play:disabled {
+  background: #444;
+  color: #888;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.landlord-action-btn.pass {
+  background: #FF9800;
+  color: #fff;
+}
+
+.landlord-action-btn.pass:hover {
+  background: #ffa726;
+}
+
+.landlord-action-btn.pass:disabled {
+  background: #444;
+  color: #888;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.landlord-turn-hint.waiting {
+  font-size: 16px;
+  color: rgba(255,255,255,0.5);
+}
+
+/* ===== My Hand Area ===== */
+.landlord-my-area {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-bottom: 12px;
+}
+
+.landlord-my-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0,0,0,0.4);
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.landlord-my-hand {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 20px;
+  min-height: var(--card-h);
+}
+
+.landlord-hand-card-wrapper {
+  position: relative;
+  margin-left: -26px;
+  transition: transform 0.15s ease, margin-top 0.15s ease;
+}
+
+.landlord-hand-card-wrapper:first-child {
+  margin-left: 0;
+}
+
+.landlord-hand-card-wrapper.selected {
+  transform: translateY(-18px);
+}
+
+.landlord-hand-card-wrapper .card-shell {
+  width: var(--card-w);
+  height: var(--card-h);
+}
+
+/* ===== Drag Selection Box ===== */
+.landlord-drag-box {
+  border: 2px dashed rgba(255, 215, 0, 0.6);
+  background: rgba(255, 215, 0, 0.1);
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* ===== Game Over ===== */
+.landlord-game-over {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  z-index: 100;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.landlord-game-over h2 {
+  font-size: 40px;
+  color: #FFD700;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+
+.landlord-game-over p {
+  font-size: 20px;
+  color: rgba(255,255,255,0.8);
+}
+
+/* ===== Desktop (large screens) - scale everything up ===== */
+@media (min-width: 900px) {
+  .landlord-game {
+    --card-w: 88px;
+    --card-h: 122px;
+    --card-font: 38px;
+    --corner-rank-font: 22px;
+    --corner-suit-font: 18px;
+    --opp-card-w: 52px;
+    --opp-card-h: 72px;
+    --opp-overlap: -26px;
+  }
+
+  .landlord-hand-card-wrapper {
+    margin-left: -32px;
+  }
+}
+
+/* ===== Mobile (small screens) - shrink ===== */
+@media (max-width: 768px) {
+  .landlord-game {
+    --card-w: 56px;
+    --card-h: 78px;
+    --card-font: 24px;
+    --corner-rank-font: 15px;
+    --corner-suit-font: 12px;
+    --opp-card-w: 30px;
+    --opp-card-h: 42px;
+    --opp-overlap: -16px;
+  }
+
+  .landlord-hand-card-wrapper {
+    margin-left: -22px;
+  }
+
+  .landlord-top-area {
+    padding: 8px 12px;
+  }
+
+  .landlord-opponent {
+    min-width: 140px;
+  }
+}

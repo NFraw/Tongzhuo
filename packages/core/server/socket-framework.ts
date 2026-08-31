@@ -2,6 +2,7 @@
 import type { Server, Socket } from 'socket.io'
 import { RoomManager } from './room-manager'
 import { PluginLoader } from './plugin-loader'
+import { logger } from './logger'
 import type { RoomPlayer, RoomSummary } from '@huiming/core-shared'
 
 // Rate limiting for game actions
@@ -37,17 +38,22 @@ export function setupSocketFramework(
     const newVersion = currentVersion + 1
     roomVersions.set(room.id, newVersion)
 
+    const sent: string[] = []
     for (const player of room.players) {
       const clientState = plugin.getClientState(room.state, player.id)
       const socketId = roomManager.getSocketId(player.id)
       if (socketId) {
         io.to(socketId).emit('game:stateUpdate', { state: clientState, version: newVersion, gameId: room.gameId })
+        sent.push(player.id)
+      } else {
+        logger.warn('state.broadcast.no_socket', { roomId: room.id, playerId: player.id })
       }
     }
+    logger.info('state.broadcast', { roomId: room.id, version: newVersion, players: sent.length, playerIds: sent.join(',') })
   }
 
   io.on('connection', (socket: Socket) => {
-    console.log(`Socket connected: ${socket.id}`)
+    logger.info('socket.connected', { socketId: socket.id })
 
     // Player handshake
     socket.on('player:hello', ({ playerId, name }: { playerId: string; name: string }) => {
@@ -61,7 +67,7 @@ export function setupSocketFramework(
         return
       }
 
-      console.log(`Player hello: ${playerId} (${name})`)
+      logger.info('player.hello', { playerId, socketId: socket.id, name })
 
       // Store player name
       roomManager.setPlayerName(playerId, name)
@@ -95,12 +101,13 @@ export function setupSocketFramework(
         if (plugin && room.state) {
           // If game was paused, resume
           if (room.phase === 'paused') {
+            logger.info('room.phase_change', { roomId: room.id, playerId }, 'paused→playing (reconnect resume)')
             room.phase = 'playing'
-            const opponent = room.players.find(p => p.id !== playerId)
-            if (opponent) {
-              const opponentSocketId = roomManager.getSocketId(opponent.id)
-              if (opponentSocketId) {
-                io.to(opponentSocketId).emit('game:resumed')
+            const otherPlayers = room.players.filter(p => p.id !== playerId)
+            for (const other of otherPlayers) {
+              const otherSocketId = roomManager.getSocketId(other.id)
+              if (otherSocketId) {
+                io.to(otherSocketId).emit('game:resumed')
               }
             }
           }
@@ -163,6 +170,7 @@ export function setupSocketFramework(
       }
 
       const room = roomManager.createRoom(player, gameId, maxPlayers || plugin.maxPlayers)
+      logger.info('room.create', { roomId: room.id, playerId, gameId, phase: room.phase })
       socket.join(room.id)
       // Send room detail with gameId, hostId, playerList
       const roomDetail = roomManager.getRoomDetailForPlayer(room.id, playerId)
@@ -174,6 +182,7 @@ export function setupSocketFramework(
 
     // Join room
     socket.on('room:join', ({ roomId }: { roomId: string }) => {
+      logger.debug('room.join.request', { socketId: socket.id, roomId })
       // Validate roomId
       if (!roomId || typeof roomId !== 'string') {
         socket.emit('room:error', { reason: '无效的房间ID' })
@@ -227,6 +236,7 @@ export function setupSocketFramework(
 
       socket.join(roomId)
       const room = roomManager.getRoom(roomId)!
+      logger.info('room.joined', { roomId, playerId, players: room.players.length, phase: room.phase })
       const plugin = pluginLoader.getPlugin(room.gameId)!
 
       // Send room detail with gameId so joining player can load the correct plugin
@@ -272,9 +282,18 @@ export function setupSocketFramework(
     socket.on('room:start', () => {
       const playerId = roomManager.getPlayerId(socket.id)
       if (!playerId) return
+      logger.debug('room.start.request', { playerId, socketId: socket.id })
 
       const room = roomManager.findRoomByPlayer(playerId)
       if (!room) return
+
+      // Verify room is still live in the manager (guards against stale refs
+      // if a race between leave/create left a dangling object).
+      if (!roomManager.getRoom(room.id)) {
+        logger.warn('room.start.stale_ref', { roomId: room.id, playerId })
+        socket.emit('room:error', { reason: '房间已失效，请重新创建' })
+        return
+      }
 
       // Check if player is host
       if (room.hostId !== playerId) {
@@ -284,6 +303,7 @@ export function setupSocketFramework(
 
       // Check if room is in waiting phase
       if (room.phase !== 'waiting') {
+        logger.warn('room.start.blocked', { roomId: room.id, playerId }, `phase=${room.phase} players=${room.players.length}`)
         socket.emit('room:error', { reason: '游戏已开始' })
         return
       }
@@ -307,6 +327,7 @@ export function setupSocketFramework(
       }
 
       // Start the game
+      logger.info('room.phase_change', { roomId: room.id, playerId }, 'waiting→playing (room:start)')
       room.phase = 'playing'
       room.state = plugin.createInitialState(room.players.map(p => p.id))
       broadcastState(io, room, plugin, roomManager)
@@ -379,7 +400,9 @@ export function setupSocketFramework(
       if (shouldCheckEnd) {
         const winnerId = plugin.checkGameEnd(room.state)
         if (winnerId) {
+          logger.info('room.phase_change', { roomId: room.id }, `playing→ended (winner=${winnerId})`)
           room.phase = 'ended'
+          logger.info('game.over', { roomId: room.id, playerId: winnerId }, 'winner declared')
           io.to(room.id).emit('game:over', { winnerId })
           broadcastRoomList(io, roomManager)
         }
@@ -397,12 +420,15 @@ export function setupSocketFramework(
       const leavingIsHost = room.hostId === playerId
       const wasPlaying = room.phase !== 'waiting'
 
+      logger.info('room.leave', { roomId: room.id, playerId, phase: room.phase, isHost: leavingIsHost, players: room.players.length })
+
       // Remove the leaving player first.
       socket.leave(room.id)
       roomManager.removePlayer(playerId)
 
       // No players left — delete the room.
       if (room.players.length === 0) {
+        logger.info('room.deleted', { roomId: room.id }, 'empty after leave')
         playAgainRequests.delete(room.id)
         broadcastRoomList(io, roomManager)
         return
@@ -412,6 +438,7 @@ export function setupSocketFramework(
       // room, dissolve the room so nobody is stranded. Otherwise (non-host
       // leaves a waiting room) keep it alive and transfer host if needed.
       if (leavingIsHost || wasPlaying) {
+        logger.info('room.dissolve', { roomId: room.id, playerId, remainingPlayers: room.players.length })
         for (const p of room.players) {
           const oppSocketId = roomManager.getSocketId(p.id)
           if (oppSocketId) {
@@ -467,7 +494,9 @@ export function setupSocketFramework(
 
         const plugin = pluginLoader.getPlugin(room.gameId)
         if (plugin) {
+          logger.info('room.phase_change', { roomId: room.id }, 'ended→playing (room:again)')
           room.phase = 'playing'
+          logger.info('room.again', { roomId: room.id }, 'new game started, phase→playing')
           room.state = plugin.createInitialState(room.players.map(p => p.id))
           broadcastState(io, room, plugin, roomManager)
         } else {
@@ -499,8 +528,8 @@ export function setupSocketFramework(
 
     // Disconnect
     socket.on('disconnect', () => {
-      console.log(`Socket disconnected: ${socket.id}`)
       const playerId = roomManager.getPlayerId(socket.id)
+      logger.info('socket.disconnected', { socketId: socket.id, playerId: playerId ?? undefined })
       if (!playerId) return
 
       const room = roomManager.findRoomByPlayer(playerId)
@@ -509,21 +538,22 @@ export function setupSocketFramework(
       // Mark player as disconnected
       roomManager.disconnectPlayer(playerId)
 
-      const opponent = room.players.find(p => p.id !== playerId)
-      if (opponent) {
-        const opponentSocketId = roomManager.getSocketId(opponent.id)
-        if (opponentSocketId) {
-          io.to(opponentSocketId).emit('game:opponentDisconnected', { playerId })
+      const otherPlayers = room.players.filter(p => p.id !== playerId)
+      for (const other of otherPlayers) {
+        const otherSocketId = roomManager.getSocketId(other.id)
+        if (otherSocketId) {
+          io.to(otherSocketId).emit('game:opponentDisconnected', { playerId })
         }
       }
 
       // If game is playing, pause it and start timeout
       if (room.phase === 'playing') {
+        logger.info('room.phase_change', { roomId: room.id, playerId }, 'playing→paused (disconnect)')
         room.phase = 'paused'
-        if (opponent) {
-          const opponentSocketId = roomManager.getSocketId(opponent.id)
-          if (opponentSocketId) {
-            io.to(opponentSocketId).emit('game:paused', { reason: '对手断线' })
+        for (const other of otherPlayers) {
+          const otherSocketId = roomManager.getSocketId(other.id)
+          if (otherSocketId) {
+            io.to(otherSocketId).emit('game:paused', { reason: '对手断线' })
           }
         }
 
@@ -532,12 +562,12 @@ export function setupSocketFramework(
           // Check if player reconnected
           const currentRoom = roomManager.findRoomByPlayer(playerId)
           if (currentRoom && currentRoom.phase === 'paused') {
-            // Player didn't reconnect, opponent wins
+            // Player didn't reconnect, remaining players win by forfeit
             currentRoom.phase = 'ended'
-            if (opponent) {
-              const opponentSocketId = roomManager.getSocketId(opponent.id)
-              if (opponentSocketId) {
-                io.to(opponentSocketId).emit('game:forfeited', { winnerId: opponent.id })
+            for (const other of otherPlayers) {
+              const otherSocketId = roomManager.getSocketId(other.id)
+              if (otherSocketId) {
+                io.to(otherSocketId).emit('game:forfeited', { winnerId: other.id })
               }
             }
             broadcastRoomList(io, roomManager)

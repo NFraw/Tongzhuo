@@ -1,11 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSocket } from '@huiming/core-client/hooks/useSocket'
 import { useGamePlugin, registerClientPluginLoader } from '@huiming/core-client/hooks/useGamePlugin'
+import { useAudio } from '@huiming/core-client/hooks'
 import type { ClientState, RoomSummary } from '@huiming/core-shared'
 
 // Register plugin loaders for lazy loading
 registerClientPluginLoader('huiming', () =>
   import('huiming/ui/client-plugin').then(m => m.huimingClientPlugin)
+)
+registerClientPluginLoader('landlord', () =>
+  import('landlord/ui/client-plugin').then(m => m.landlordClientPlugin)
+)
+registerClientPluginLoader('nimmt', () =>
+  import('nimmt/ui/client-plugin').then(m => m.nimmtClientPlugin)
 )
 
 function getStoredPlayerId(): string {
@@ -28,6 +35,133 @@ interface RoomView {
 }
 
 const EMPTY_ROOM: RoomView = { roomId: '', gameId: '', isHost: false, players: [] }
+
+/**
+ * Waiting-room screen. Plays the welcome theme while players wait, looping until
+ * the host starts the game (at which point this screen unmounts and the game
+ * view takes over the soundtrack).
+ */
+function RoomScreen({
+  room, error, playerId, allReady, copied,
+  onCopyLink, onToggleReady, onStartGame, onLeaveRoom,
+}: {
+  room: RoomView
+  error: string | null
+  playerId: string
+  allReady: boolean
+  copied: boolean
+  onCopyLink: () => void
+  onToggleReady: () => void
+  onStartGame: () => void
+  onLeaveRoom: () => void
+}) {
+  useAudio('welcome')
+  return (
+    <div className="room-page">
+      <h2>房间</h2>
+      <p className="room-game-id">游戏: {room.gameId}</p>
+      {error && <div className="error-message">{error}</div>}
+      <div className="room-link-box">
+        <input
+          readOnly
+          value={`${window.location.origin}?join=${room.roomId}`}
+        />
+        <button onClick={onCopyLink}>
+          {copied ? '已复制' : '复制链接'}
+        </button>
+      </div>
+      <div className="room-player-list">
+        <h3>玩家列表</h3>
+        <ul>
+          {room.players.map((p) => (
+            <li key={p.id} className={`room-player-item ${p.connected ? '' : 'disconnected'}`}>
+              <span className="player-name">
+                {p.name}
+                {p.id === playerId && ' (你)'}
+                {room.isHost && p.id === playerId && ' 👑'}
+              </span>
+              <span className="player-status">
+                {p.ready ? '✅ 准备就绪' : '⏳ 未准备'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="room-actions">
+        <button className="ready-btn" onClick={onToggleReady}>
+          {room.players.find(p => p.id === playerId)?.ready ? '取消准备' : '准备'}
+        </button>
+        {room.isHost && (
+          <button
+            className="start-btn"
+            onClick={onStartGame}
+            disabled={!allReady || room.players.length < 2}
+          >
+            开始游戏
+          </button>
+        )}
+        <button className="lobby-btn" onClick={onLeaveRoom}>
+          退出房间
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Settlement screen. Resolves the winner correctly: role-based games (landlord)
+ * compare the winning *role* against the player's own role, while it-based
+ * games (huiming) compare winnerId against the player id.
+ */
+function EndedScreen({
+  winnerId, playerId, gameState, onPlayAgain, onLeaveRoom,
+}: {
+  winnerId: string | null
+  playerId: string
+  gameState: ClientState | null
+  onPlayAgain: () => void
+  onLeaveRoom: () => void
+}) {
+  const myRole = (gameState as any)?.myRole
+  const roleWinner = myRole !== undefined ? (gameState as any)?.winner : undefined
+  const hasWinner = winnerId != null || roleWinner != null
+  const isWinner = roleWinner !== undefined
+    ? roleWinner === myRole
+    : winnerId === playerId
+  useAudio(!hasWinner ? 'normal' : (isWinner ? 'win' : 'lose'))
+
+  const detail = roleWinner != null
+    ? `${roleWinner === 'landlord' ? '地主' : '农民'}获胜牌局`
+    : null
+
+  return (
+    <div className="lobby">
+      <h2>游戏结束</h2>
+      <p>{!hasWinner ? '游戏结束' : (isWinner ? '你赢了！' : '你输了')}</p>
+      {detail && <p className="lobby-subtitle">{detail}</p>}
+      <div className="lobby-actions">
+        <button className="lobby-btn primary" onClick={onPlayAgain}>
+          再来一局
+        </button>
+        <button className="lobby-btn" onClick={onLeaveRoom}>
+          返回大厅
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function PausedScreen({ onLeaveRoom }: { onLeaveRoom: () => void }) {
+  return (
+    <div className="lobby">
+      <h2>游戏暂停</h2>
+      <p>对手断线，等待重连...</p>
+      <span className="back-link" onClick={onLeaveRoom}>
+        返回大厅
+      </span>
+    </div>
+  )
+}
 
 export function App() {
   const { emit, on, playerId, connected, serverUrl, connectError, connect, disconnect, serverHistory } = useSocket()
@@ -64,12 +198,19 @@ export function App() {
         setRooms(roomList)
       }),
       on('room:created', (data: { roomId: string; gameId: string; hostId: string; playerList: { id: string; name: string; connected: boolean; ready: boolean }[]; isHost: boolean }) => {
+        console.log('[room:created]', { roomId: data.roomId, gameId: data.gameId, isHost: data.isHost, players: data.playerList.length })
         pendingRetryRef.current = null
+        stateVersionRef.current = 0
+        setGameState(null)
+        setWinnerId(null)
         setRoom({ roomId: data.roomId, gameId: data.gameId, isHost: data.isHost, players: data.playerList })
         setPhase('room')
       }),
       on('room:joined', (data: { gameId: string; playerList: { id: string; name: string; connected: boolean; ready: boolean }[]; isHost: boolean; roomId: string }) => {
         pendingRetryRef.current = null
+        stateVersionRef.current = 0
+        setGameState(null)
+        setWinnerId(null)
         setRoom({ roomId: data.roomId, gameId: data.gameId, isHost: data.isHost, players: data.playerList })
         setPhase('room')
       }),
@@ -77,8 +218,17 @@ export function App() {
         setRoom({ roomId: data.roomId, gameId: data.gameId, isHost: data.isHost, players: data.playerList })
         // On reconnect back to a waiting room, route back to the room page.
         if (phase === 'connect' || phase === 'lobby') {
+          stateVersionRef.current = 0
+          setGameState(null)
           setPhase('room')
         }
+      }),
+      on('room:againAccepted', () => {
+        // A new game is starting in the same room — reset version so the
+        // incoming game:stateUpdate (version=1) isn't rejected as "stale".
+        stateVersionRef.current = 0
+        setGameState(null)
+        setWinnerId(null)
       }),
       on('game:stateUpdate', ({ state, version, gameId }: { state: ClientState; version?: number; gameId?: string }) => {
         // Ignore older versions
@@ -263,8 +413,8 @@ export function App() {
   if (phase === 'connect') {
     return (
       <div className="lobby">
-        <h1>卡牌平台</h1>
-        <p className="lobby-subtitle">可插拔的联机卡牌游戏平台</p>
+        <h1>欢乐卡牌</h1>
+        <p className="lobby-subtitle">联机卡牌游戏平台</p>
         <div className="connect-panel">
           <h2>连接服务器</h2>
           {connectError && <div className="error-message">连接失败: {connectError}</div>}
@@ -304,7 +454,7 @@ export function App() {
   if (phase === 'lobby') {
     return (
       <div className="lobby">
-        <h1>卡牌平台</h1>
+        <h1>欢乐卡牌</h1>
         <p className="lobby-subtitle">已连接: {serverUrl}</p>
         {error && <div className="error-message">{error}</div>}
         <div className="lobby-actions">
@@ -356,86 +506,35 @@ export function App() {
   if (phase === 'room') {
     const allReady = room.players.length > 0 && room.players.every(p => p.ready)
     return (
-      <div className="room-page">
-        <h2>房间</h2>
-        <p className="room-game-id">游戏: {room.gameId}</p>
-        {error && <div className="error-message">{error}</div>}
-        <div className="room-link-box">
-          <input
-            readOnly
-            value={`${window.location.origin}?join=${room.roomId}`}
-          />
-          <button onClick={handleCopyLink}>
-            {copied ? '已复制' : '复制链接'}
-          </button>
-        </div>
-        <div className="room-player-list">
-          <h3>玩家列表</h3>
-          <ul>
-            {room.players.map((p) => (
-              <li key={p.id} className={`room-player-item ${p.connected ? '' : 'disconnected'}`}>
-                <span className="player-name">
-                  {p.name}
-                  {p.id === playerId && ' (你)'}
-                  {room.isHost && p.id === playerId && ' 👑'}
-                </span>
-                <span className="player-status">
-                  {p.ready ? '✅ 准备就绪' : '⏳ 未准备'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="room-actions">
-          <button className="ready-btn" onClick={handleToggleReady}>
-            {room.players.find(p => p.id === playerId)?.ready ? '取消准备' : '准备'}
-          </button>
-          {room.isHost && (
-            <button
-              className="start-btn"
-              onClick={handleStartGame}
-              disabled={!allReady || room.players.length < 2}
-            >
-              开始游戏
-            </button>
-          )}
-          <button className="lobby-btn" onClick={handleLeaveRoom}>
-            退出房间
-          </button>
-        </div>
-      </div>
+      <RoomScreen
+        room={room}
+        error={error}
+        playerId={playerId}
+        allReady={allReady}
+        copied={copied}
+        onCopyLink={handleCopyLink}
+        onToggleReady={handleToggleReady}
+        onStartGame={handleStartGame}
+        onLeaveRoom={handleLeaveRoom}
+      />
     )
   }
 
   // Paused phase
   if (phase === 'paused') {
-    return (
-      <div className="lobby">
-        <h2>游戏暂停</h2>
-        <p>对手断线，等待重连...</p>
-        <span className="back-link" onClick={handleLeaveRoom}>
-          返回大厅
-        </span>
-      </div>
-    )
+    return <PausedScreen onLeaveRoom={handleLeaveRoom} />
   }
 
   // Ended phase
   if (phase === 'ended') {
-    const isWinner = winnerId === playerId
     return (
-      <div className="lobby">
-        <h2>游戏结束</h2>
-        <p>{isWinner ? '你赢了！' : '你输了'}</p>
-        <div className="lobby-actions">
-          <button className="lobby-btn primary" onClick={handlePlayAgain}>
-            再来一局
-          </button>
-          <button className="lobby-btn" onClick={handleLeaveRoom}>
-            返回大厅
-          </button>
-        </div>
-      </div>
+      <EndedScreen
+        winnerId={winnerId}
+        playerId={playerId}
+        gameState={gameState}
+        onPlayAgain={handlePlayAgain}
+        onLeaveRoom={handleLeaveRoom}
+      />
     )
   }
 

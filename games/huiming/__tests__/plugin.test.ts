@@ -62,21 +62,77 @@ describe('huimingServerPlugin client state', () => {
     expect(res.state.players[0].canPlace).toBe(true)
     expect(res.state.players[1].canPlace).toBe(true)
   })
-  it('skips placing turn when player cannot place, and transitions to taking when both cannot', () => {
+  it('transitions to taking when both players have no cards to place', () => {
     const state: GameState = huimingServerPlugin.createInitialState(['p1', 'p2'])
     const g = state as any
-    // Set up a placing phase where both players have already used canPlace.
+    // A placing phase where neither player holds any cards.
     g.phase = 'placing'
     g.currentTurn = 0
-    g.players[0].canPlace = false
-    g.players[1].canPlace = false
-    // Put one empty cell so the "hasEmpty" path is taken.
-    g.board[0][0].card = null
-    // Place action should skip P0 (can't place) and, since P1 also can't,
-    // transition to taking.
+    g.players[0].hand = []
+    g.players[1].hand = []
+    // Place should skip P0 (no cards) and, since P1 also has none, transition
+    // to taking.
     const res = huimingServerPlugin.handleEvent(state, 'p1', 'place', { cardId: 'x', row: 0, col: 0, faceUp: true })
     expect(res.error).toBeUndefined()
     expect(res.state.phase).toBe('taking')
     expect(res.state.currentTurn).toBe(1) // turn passed to P1
+  })
+  it('keeps placing until ALL cards are back on the board, not just one each', () => {
+    const state: GameState = huimingServerPlugin.createInitialState(['p1', 'p2'])
+    const g = state as any
+    g.phase = 'placing'
+    g.currentTurn = 0
+    // The renewal round lets each player return ALL of their hand cards, so
+    // empty cells must equal the total hand cards (2 each = 4 cells).
+    for (const [r, c] of [[0, 0], [0, 1], [0, 2], [0, 3]] as const) {
+      g.board[r][c].card = null
+    }
+    g.players[0].hand = [
+      { id: 'p0-a', suit: 'hearts', rank: '1', value: 1, deckIndex: 1 },
+      { id: 'p0-b', suit: 'diamonds', rank: '2', value: 2, deckIndex: 2 },
+    ]
+    g.players[1].hand = [
+      { id: 'p1-a', suit: 'clubs', rank: '1', value: 1, deckIndex: 3 },
+      { id: 'p1-b', suit: 'spades', rank: '2', value: 2, deckIndex: 4 },
+    ]
+    // P0 places their first card — still placing, not done yet.
+    let res = huimingServerPlugin.handleEvent(state, 'p1', 'place', { cardId: 'p0-a', row: 0, col: 0, faceUp: true })
+    expect(res.state.phase).toBe('placing')
+    // P1 places one — still placing.
+    res = huimingServerPlugin.handleEvent(state, 'p2', 'place', { cardId: 'p1-a', row: 0, col: 1, faceUp: true })
+    expect(res.state.phase).toBe('placing')
+    // P0 places their last — still placing, board not full yet.
+    res = huimingServerPlugin.handleEvent(state, 'p1', 'place', { cardId: 'p0-b', row: 0, col: 2, faceUp: true })
+    expect(res.state.phase).toBe('placing')
+    // P1 places their last — board full now, transition to taking.
+    res = huimingServerPlugin.handleEvent(state, 'p2', 'place', { cardId: 'p1-b', row: 0, col: 3, faceUp: true })
+    expect(res.state.phase).toBe('taking')
+  })
+  it('skips a player with no cards and keeps placing for the other', () => {
+    const state: GameState = huimingServerPlugin.createInitialState(['p1', 'p2'])
+    const g = state as any
+    g.phase = 'placing'
+    g.currentTurn = 0
+    // P0 has no cards, P1 has two → exactly 2 empty cells for the renewal round.
+    for (const [r, c] of [[0, 0], [0, 1]] as const) {
+      g.board[r][c].card = null
+    }
+    g.players[0].hand = []
+    g.players[1].hand = [
+      { id: 'p1-a', suit: 'clubs', rank: '1', value: 1, deckIndex: 3 },
+      { id: 'p1-b', suit: 'spades', rank: '2', value: 2, deckIndex: 4 },
+    ]
+    // P0 has no cards — their turn is skipped.
+    let res = huimingServerPlugin.handleEvent(state, 'p1', 'place', { cardId: 'x', row: 0, col: 0, faceUp: true })
+    expect(res.error).toBeUndefined()
+    expect(res.state.currentTurn).toBe(1)
+    // P1 places one — still placing (P0 has none, P1 has one left).
+    res = huimingServerPlugin.handleEvent(state, 'p2', 'place', { cardId: 'p1-a', row: 0, col: 0, faceUp: true })
+    expect(res.state.phase).toBe('placing')
+    // P0 skipped again, P1 places their final card — board full → taking.
+    res = huimingServerPlugin.handleEvent(state, 'p1', 'place', { cardId: 'x', row: 0, col: 1, faceUp: true })
+    expect(res.state.currentTurn).toBe(1)
+    res = huimingServerPlugin.handleEvent(state, 'p2', 'place', { cardId: 'p1-b', row: 0, col: 1, faceUp: true })
+    expect(res.state.phase).toBe('taking')
   })
 })

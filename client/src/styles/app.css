@@ -165,7 +165,11 @@
 .game-room-top-bar {
   display: flex;
   justify-content: flex-end;
-  padding-bottom: 8px;
+  padding: 8px;
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 10;
 }
 
 .game-leave-btn {

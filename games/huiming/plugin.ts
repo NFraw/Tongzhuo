@@ -129,27 +129,33 @@ export const huimingServerPlugin: GameServerPlugin = {
       case 'place': {
         const { cardId, row, col, faceUp } = payload
         if (game.phase === 'placing') {
-          // Renewal round: players place cards back onto the board.
-          // If the current player can't place (already used this round),
-          // skip their turn — but if the next player also can't place,
-          // transition to taking so the game doesn't get stuck.
-          if (!canPlace(game, playerIdx)) {
+          // Renewal round (Rule 8): the two players take turns placing ALL of
+          // their hand cards back onto the board. This continues until every
+          // card is back (board full), then the take phase resumes. The
+          // once-per-game placement allowance (Rule 6) does NOT apply here.
+          const p = game.players[playerIdx]
+          if (p.hand.length === 0) {
+            // This player has nothing left to place — skip their turn. If the
+            // other player also has nothing, all cards are back on the board.
             const nextIdx = (1 - playerIdx) as 0 | 1
-            if (!canPlace(game, nextIdx)) {
+            if (game.players[nextIdx].hand.length === 0) {
               game.phase = 'taking'
               game.hasTakenThisTurn = false
             }
             game.currentTurn = nextIdx
             break
           }
+          // Renewal placement isn't bound by the once-per-game Rule 6 limit.
+          p.canPlace = true
           placeCard(game, playerIdx, cardId, row, col, faceUp)
+          // After renewal, rules 1–6 (including the one-time place) restart, so
+          // restore both players' place allowance for the fresh take phase.
+          game.players[0].canPlace = true
+          game.players[1].canPlace = true
           let hasEmpty = false
           for (const r of game.board) { for (const cell of r) { if (!cell.card) hasEmpty = true } }
-          if (!hasEmpty || !canPlace(game, (1 - playerIdx) as 0 | 1)) {
-            // Board full, or the other player can't place either → resume taking.
-            // The turn was already switched by the taking-phase path above (via
-            // the 1-currentTurn flip), so give it to the player who *didn't*
-            // just place — i.e. the one whose turn it *would* have been.
+          if (!hasEmpty) {
+            // All cards are back on the board — begin a fresh take phase.
             game.phase = 'taking'
             game.hasTakenThisTurn = false
           }

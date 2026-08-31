@@ -1,0 +1,15 @@
+{
+  "name": "landlord",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@huiming/core-shared": "*",
+    "@huiming/core-server": "*"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0"
+  }
+}

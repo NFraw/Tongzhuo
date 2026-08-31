@@ -1,5 +1,5 @@
-appId: com.huiming.desktop
-productName: 晦明
+appId: com.cardplatform.desktop
+productName: 欢乐卡牌
 directories:
   output: dist
 files:
