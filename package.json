@@ -1,0 +1,22 @@
+{
+  "name": "huiming",
+  "private": true,
+  "workspaces": [
+    "packages/core/*",
+    "games/*",
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "npm -w server run dev",
+    "dev:client": "npm -w client run dev",
+    "build": "npm -w client run build && cp -r client/dist server/public",
+    "server": "npm -w server run start",
+    "test": "npm -w @huiming/core-server run test && npm -w huiming run test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "typescript": "^5.7.0"
+  }
+}
