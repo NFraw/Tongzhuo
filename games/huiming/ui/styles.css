@@ -48,3 +48,19 @@
   font-size: 56px;
   color: #e5c07b;
 }
+
+.huiming-dark-pick-hint {
+  text-align: center;
+  font-size: 14px;
+  color: #e5c07b;
+  background: rgba(229,192,123,0.1);
+  border: 1px solid rgba(229,192,123,0.3);
+  border-radius: 8px;
+  padding: 8px 16px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}

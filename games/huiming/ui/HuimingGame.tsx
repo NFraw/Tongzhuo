@@ -17,17 +17,21 @@ export function HuimingGame({ state, playerId, onAction }: GameComponentProps) {
     if (s.winner || !isMyTurn) return
     const cell = s.board[row][col]
 
+    // Placing a card on an empty cell
     if (selectedCard) {
-      if (!cell.card) {
+      if (!cell.exists) {
         onAction('place', { cardId: selectedCard.id, row, col, faceUp: placingFaceUp })
         setSelectedCard(null)
       }
       return
     }
 
-    if (cell.card && cell.faceUp) {
+    // Taking a face-up card
+    if (cell.faceUp && cell.card) {
       onAction('take', { row, col })
-    } else if (cell.card && !cell.faceUp && s.myDarkPickCharges > 0) {
+    }
+    // Dark pick: card exists but face-down, and player has charges
+    else if (!cell.faceUp && cell.exists && s.myDarkPickCharges > 0) {
       onAction('darkPick', { row, col })
     }
   }
@@ -48,8 +52,14 @@ export function HuimingGame({ state, playerId, onAction }: GameComponentProps) {
         state={s}
         onCellClick={handleCellClick}
         interactive={isMyTurn && !s.winner}
-        darkPickMode={s.myDarkPickCharges > 0 && !selectedCard}
+        darkPickMode={isMyTurn && s.myDarkPickCharges > 0 && !selectedCard}
       />
+
+      {isMyTurn && s.myDarkPickCharges > 0 && !selectedCard && (
+        <div className="huiming-dark-pick-hint">
+          暗取模式 — 点击任意暗牌盲取（剩余 {s.myDarkPickCharges} 次）
+        </div>
+      )}
 
       <div className="huiming-hand-section">
         {selectedCard && (
