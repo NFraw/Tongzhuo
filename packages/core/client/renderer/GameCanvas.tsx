@@ -1,30 +1,46 @@
 /**
- * GameCanvas — React host component for a PixiJS canvas.
+ * GameCanvas — PixiJS canvas 的 React 宿主组件
  *
- * Lifecycle:
- *   1. On mount: create PIXI.Application, call rendererFactory to get a renderer
- *   2. On state change: forward to renderer.sync()
- *   3. On resize: notify renderer
- *   4. On unmount: destroy everything cleanly
+ * 这是连接 React 和 PixiJS 的桥梁。
+ * 类比 Java：相当于一个 CanvasPanel，管理 WebGL canvas 的生命周期。
  *
- * If WebGL is unavailable or the renderer factory returns null, calls
- * onUnavailable() so the parent can fall back to CSS rendering.
+ * 生命周期：
+ *   1. 挂载时：创建 PIXI.Application → 调用 rendererFactory 获取渲染器
+ *   2. 状态变化时：转发给 renderer.sync()
+ *   3. 窗口缩放时：通知渲染器
+ *   4. 卸载时：销毁一切
+ *
+ * 兜底机制：
+ *   - WebGL 不可用 → 调用 onUnavailable()，父组件切换到 CSS 渲染
+ *   - WebGL 上下文丢失 → 同上
+ *   - localStorage['huiming-renderer']='css' → 硬切 CSS
+ *
+ * 【如果你想修改 canvas 行为】：
+ *   - app.init() 参数：背景色、抗锯齿、分辨率上限
+ *   - ResizeObserver：监听容器尺寸变化
+ *   - FPS 计数器：仅开发模式显示
  */
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Application, isWebGLSupported } from 'pixi.js'
 import type { GameRendererFactory, RendererFactoryContext } from '@huiming/core-shared'
 
-// Portable dev check (works in Vite, Webpack, and plain Node)
+// 开发环境检测（Vite、Webpack、Node 都兼容）
 const isDev = typeof process !== 'undefined'
   ? process.env.NODE_ENV !== 'production'
   : false
 
 interface GameCanvasProps {
+  /** 渲染器工厂函数（由游戏插件提供，如 createLandlordRenderer） */
   rendererFactory: GameRendererFactory
+  /** 游戏状态（从服务器同步的 LandlordClientState 等） */
   state: unknown
+  /** 选中的卡牌 ID 集合（可选，用于斗地主选牌） */
   selectedIds?: Set<string>
+  /** 发送游戏动作的回调（如出牌、叫分） */
   onAction: (event: string, payload: any) => void
+  /** 选牌变化回调（渲染器内部点击卡牌时触发） */
   onSelectionChange?: (selectedIds: Set<string>) => void
+  /** WebGL 不可用时的兜底回调 */
   onUnavailable: () => void
 }
 
@@ -36,12 +52,16 @@ export function GameCanvas({
   onSelectionChange,
   onUnavailable,
 }: GameCanvasProps) {
+  /** 容器 DOM 引用（PixiJS canvas 会被 append 到这里） */
   const containerRef = useRef<HTMLDivElement>(null)
+  /** 渲染器实例引用（由 rendererFactory 创建） */
   const rendererRef = useRef<Awaited<ReturnType<GameRendererFactory>>>(null)
+  /** PIXI Application 实例引用 */
   const appRef = useRef<Application>(null)
+  /** 渲染器是否已就绪（就绪后才开始同步状态） */
   const [ready, setReady] = useState(false)
 
-  // ---- Debug HUD (dev only) ----
+  // ─── Debug HUD（仅开发模式） ───
   const fpsRef = useRef<HTMLDivElement>(null)
   const frameCountRef = useRef(0)
   const lastFpsTimeRef = useRef(0)
@@ -50,32 +70,31 @@ export function GameCanvas({
     const container = containerRef.current
     if (!container) return
 
-    // Pre-check WebGL support
+    // 预检 WebGL 支持
     if (!isWebGLSupported()) {
       onUnavailable()
       return
     }
 
-    let destroyed = false
+    let destroyed = false  // 防止异步初始化完成后组件已卸载
 
     ;(async () => {
       try {
         const app = new Application()
         await app.init({
-          background: '#141820',
-          antialias: true,
-          resolution: Math.min(window.devicePixelRatio || 1, 2),
-          autoDensity: true,
-          resizeTo: container,
-          // 关闭自动渲染循环，由 BaseGameRenderer 在需要时手动渲染
-          autoStart: false,
+          background: '#141820',      // 深色背景
+          antialias: true,             // 抗锯齿
+          resolution: Math.min(window.devicePixelRatio || 1, 2),  // DPR 上限 2（避免高 DPI 设备过慢）
+          autoDensity: true,           // 自动适配 CSS 像素
+          resizeTo: container,         // 自动跟随容器尺寸
+          autoStart: false,            // 关闭自动渲染循环，由 BaseGameRenderer 按需渲染
         })
         if (destroyed) { app.destroy(); return }
 
         appRef.current = app
         container.appendChild(app.canvas as HTMLCanvasElement)
 
-        // FPS counter (dev only)
+        // FPS 计数器（仅开发模式）
         if (isDev) {
           lastFpsTimeRef.current = performance.now()
           app.ticker.add(() => {
@@ -90,7 +109,7 @@ export function GameCanvas({
           })
         }
 
-        // WebGL context lost → fallback
+        // WebGL 上下文丢失 → 触发兜底
         const canvas = app.canvas as HTMLCanvasElement
         const onContextLost = () => {
           console.warn('[GameCanvas] WebGL context lost')
@@ -98,6 +117,7 @@ export function GameCanvas({
         }
         canvas.addEventListener('webglcontextlost', onContextLost)
 
+        // 创建渲染器
         const ctx: RendererFactoryContext = {
           onAction,
           onSelectionChange,
@@ -118,6 +138,7 @@ export function GameCanvas({
       }
     })()
 
+    // 清理函数：组件卸载时销毁一切
     return () => {
       destroyed = true
       rendererRef.current?.destroy()
@@ -125,16 +146,16 @@ export function GameCanvas({
       appRef.current?.destroy()
       appRef.current = null
     }
-  }, [rendererFactory]) // mount only; rendererFactory is a stable reference
+  }, [rendererFactory]) // 仅挂载时执行；rendererFactory 是稳定引用
 
-  // Forward state to renderer
+  // 状态变化时转发给渲染器
   useEffect(() => {
     if (ready && rendererRef.current) {
       rendererRef.current.sync(state, selectedIds)
     }
   }, [state, selectedIds, ready])
 
-  // Resize observer → forward to renderer
+  // 容器尺寸变化时通知渲染器
   useEffect(() => {
     if (!ready) return
     const observer = new ResizeObserver(() => {
@@ -149,10 +170,11 @@ export function GameCanvas({
       ref={containerRef}
       style={{
         position: 'absolute',
-        inset: 0,
+        inset: 0,       // 铺满父容器
         overflow: 'hidden',
       }}
     >
+      {/* FPS 计数器（仅开发模式） */}
       {isDev && (
         <div
           ref={fpsRef}

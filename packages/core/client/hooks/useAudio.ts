@@ -1,25 +1,46 @@
+/**
+ * useAudio.ts — 音频引擎（BGM + 语音音效）
+ *
+ * 管理所有音频播放，包括：
+ *   1. BGM（背景音乐）— 循环播放，按场景切换（大厅/对局/紧张/胜利/失败）
+ *   2. 语音 SFX — 一次性播放（出牌语音、炸弹音效等）
+ *
+ * 架构设计：
+ *   - BGM 使用单例 HTMLAudioElement，切换场景时带淡入淡出
+ *   - 语音使用每次 new Audio()，多个语音可同时播放
+ *   - 浏览器要求用户交互后才能播放音频（autoplay policy），所以有手势解锁机制
+ *   - GSAP 用于音量淡入淡出动画
+ *
+ * 类比 C++：相当于一个 AudioManager 单例，管理 BGM 和 SFX 两个子系统。
+ *
+ * 【如果你想添加新的 BGM 场景】：
+ *   1. 在 BgmScene 类型中添加新值
+ *   2. 在 BGM_URLS 中添加文件映射
+ *   3. 在客户端 public/audio/bgm/ 中放入对应 mp3 文件
+ *   4. 在游戏组件中调用 setBgmScene('新场景名')
+ *
+ * 【如果你想添加新的语音音效】：
+ *   1. 在客户端 public/audio/voice/ 中放入音频文件
+ *   2. 在游戏组件中调用 playVoice('文件名')
+ */
 import { useCallback, useEffect, useState } from 'react'
 import { gsap } from 'gsap'
 
 /**
- * 通用 BGM 场景 - 持续循环播放的背景音乐
- * 所有游戏共享这些场景，每个游戏可以选择使用哪些场景
+ * BGM 场景类型。每个场景对应一个循环播放的背景音乐。
+ *
+ * - 'lobby'    → 大厅/等待阶段（轻松）
+ * - 'playing'  → 对局中（紧张）
+ * - 'exciting' → 接近尾声（手牌≤3张时切换，更紧张）
+ * - 'victory'  → 胜利
+ * - 'defeat'   → 失败
  */
 export type BgmScene = 'lobby' | 'playing' | 'exciting' | 'victory' | 'defeat'
 
-/**
- * 音频文件管理
- *
- * BGM 文件位于 /audio/bgm/，命名为 `bgm/huaijiu_<scene>.mp3`
- * 语音 SFX 位于 /audio/voice/，命名为 `voice/<name>.<ext>`
- *
- * 如果文件名包含点号（如 "爆炸.ogg"），直接使用；
- * 否则追加 ".mp3" 以保持向后兼容。
- */
 const BASE_AUDIO = 'audio'
 const BGM_EXT = '.mp3'
 
-// BGM 文件映射（预加载用）
+/** BGM 场景 → 文件路径映射 */
 const BGM_URLS: Record<BgmScene, string> = {
   lobby: `${BASE_AUDIO}/bgm/huaijiu_lobby${BGM_EXT}`,
   playing: `${BASE_AUDIO}/bgm/huaijiu_playing${BGM_EXT}`,
@@ -28,7 +49,7 @@ const BGM_URLS: Record<BgmScene, string> = {
   defeat: `${BASE_AUDIO}/bgm/huaijiu_defeat${BGM_EXT}`,
 }
 
-// 旧文件名映射（向后兼容）
+/** 旧文件名映射（向后兼容，新代码应使用 BgmScene） */
 const BGM_URLS_COMPAT: Record<string, string> = {
   welcome: `${BASE_AUDIO}/bgm/huaijiu_welcome${BGM_EXT}`,
   normal: `${BASE_AUDIO}/bgm/huaijiu_normal${BGM_EXT}`,
@@ -37,13 +58,21 @@ const BGM_URLS_COMPAT: Record<string, string> = {
   lose: `${BASE_AUDIO}/bgm/huaijiu_lose${BGM_EXT}`,
 }
 
-// 模块级单例状态
-let bgmEl: HTMLAudioElement | null = null
-let currentScene: BgmScene | null = null
-let storedScene: BgmScene | null = null
-let audioContext: AudioContext | null = null
-let gestureHandler: (() => void) | null = null
-let isUnlocked = false
+/**
+ * 模块级单例状态（全局唯一，所有组件共享）。
+ *
+ * 为什么用模块变量而不是 React state？
+ *   因为 BGM 需要在组件卸载/重渲染时保持播放。
+ *   React state 会在组件卸载时丢失，而模块变量在 JS 进程存活期间一直存在。
+ *
+ * 类比 C++：这些就是全局 static 变量。
+ */
+let bgmEl: HTMLAudioElement | null = null   // BGM 播放器（单例）
+let currentScene: BgmScene | null = null    // 当前正在播放的场景
+let storedScene: BgmScene | null = null     // 手势解锁前缓存的场景
+let audioContext: AudioContext | null = null // Web Audio API 上下文
+let gestureHandler: (() => void) | null = null // 手势监听器引用
+let isUnlocked = false                       // 是否已通过用户手势解锁音频
 
 /**
  * 解析音频文件路径
@@ -99,20 +128,31 @@ function ensureContext(): boolean {
 }
 
 /**
- * 设置 BGM 场景，只有场景变化时才切换
- * @param scene - 新场景，null 表示停止
+ * 设置 BGM 场景。只有场景实际变化时才切换（避免重复操作）。
+ *
+ * 这是游戏组件控制 BGM 的主要接口。
+ *
+ * @param scene - 新场景名，null 表示停止播放
+ *
+ * 调用处：
+ *   - LandlordGame.tsx → useEffect 中根据游戏状态设置场景
+ *   - App.tsx → RoomScreen 播放 'lobby'，EndedScreen 停止（null）
+ *
+ * 使用示例：
+ *   setBgmScene('playing')   // 切换到对局 BGM
+ *   setBgmScene(null)         // 停止 BGM
+ *   setBgmScene('exciting')  // 切换到紧张 BGM（手牌≤3 张时）
  */
 export function setBgmScene(scene: BgmScene | null): void {
-  // 场景未变化，跳过
-  if (scene === currentScene) return
+  if (scene === currentScene) return  // 场景未变化，跳过
 
-  // 如果音频未解锁，缓存场景等待解锁
+  // 浏览器 autoplay policy：用户交互前无法播放音频
+  // 先缓存，等用户点击/按键后自动播放
   if (!isUnlocked) {
     storedScene = scene
     return
   }
 
-  // 场景变化，切换 BGM
   currentScene = scene
   playBgm(scene)
 }
@@ -125,15 +165,28 @@ export function getCurrentScene(): BgmScene | null {
 }
 
 /**
- * 播放一次性音效
- * @param name - 音效文件名，如果包含点号则直接使用，否则追加 .mp3
+ * 播放一次性语音/音效。多个音效可同时播放（互不影响）。
+ *
+ * @param name - 音效文件名。
+ *   如果包含点号（如 "special_bomb.ogg"），直接使用；
+ *   否则追加 ".mp3"（如 "buyao1" → "buyao1.mp3"）。
+ *
+ * 文件位置：client/public/audio/voice/
+ *
+ * 调用处：
+ *   - LandlordGame.tsx → 出牌时播放牌型语音，pass 时播放"不要"
+ *   - NimmtGame.tsx → 翻牌时播放音效
+ *
+ * 使用示例：
+ *   playVoice('buyao1.ogg')     // 播放"不要"
+ *   playVoice('special_bomb')   // 播放炸弹音效（自动加 .mp3）
  */
 export function playVoice(name: string): void {
   const file = name.includes('.') ? name : `${name}.mp3`
   try {
     const el = new Audio(resolveUrl(`voice/${file}`))
     el.preload = 'auto'
-    el.play().catch(() => {})
+    el.play().catch(() => {})  // 静默失败（可能用户还没交互）
   } catch {
     /* ignore */
   }

@@ -1,4 +1,29 @@
-// packages/core/server/socket-framework.ts
+/**
+ * socket-framework.ts — 服务器端 Socket.IO 事件处理框架
+ *
+ * 这是整个服务器的"神经中枢"——所有的客户端-服务器通信都经过这里。
+ * 类比 Java：相当于一个 WebSocket Controller，处理所有路由和业务事件。
+ *
+ * 架构概述：
+ *   Socket.IO 是一个基于 WebSocket 的实时通信库。每个客户端连接后会触发
+ *   'connection' 事件，然后通过 socket.on() 监听各种业务事件。
+ *
+ * 主要事件流：
+ *   1. 客户端连接 → player:hello 握手 → 获取游戏列表
+ *   2. room:create/join → 创建/加入房间
+ *   3. room:start → 房主开始游戏 → createInitialState → 推送初始状态
+ *   4. game:action → handleEvent → 更新状态 → broadcastState → 推送给所有玩家
+ *   5. disconnect → 断线处理 → 暂停/判负
+ *
+ * 安全机制：
+ *   - 认证中间件（io.use）检查 token、服务器密码、版本兼容性
+ *   - 操作频率限制（100ms 间隔）
+ *   - 所有游戏逻辑校验在 plugin.handleEvent 中完成
+ *
+ * 【如果你想添加新的 Socket 事件】：
+ *   在 io.on('connection') 内部添加 socket.on('事件名', handler)。
+ *   参考现有的 room:create、game:action 等实现。
+ */
 import type { Server, Socket } from 'socket.io'
 import { RoomManager } from './room-manager'
 import { PluginLoader } from './plugin-loader'
@@ -8,12 +33,23 @@ import { ServerConfig } from './server-config'
 import type { RoomPlayer, RoomSummary } from '@huiming/core-shared'
 import { AuthErrors, PROTOCOL_VERSION, isCompatible } from '@huiming/core-shared'
 
-// Rate limiting for game actions
-const ACTION_RATE_LIMIT_MS = 100 // Minimum 100ms between actions
+/** 操作频率限制：同一玩家两次操作间隔不得少于 100ms，防止刷屏/作弊 */
+const ACTION_RATE_LIMIT_MS = 100
 
-// Disconnect timeout tracking
-const DISCONNECT_TIMEOUT_MS = 45000 // 45 seconds timeout for reconnection
+/** 断线超时：45 秒内未重连则判负 */
+const DISCONNECT_TIMEOUT_MS = 45000
 
+/**
+ * 设置 Socket.IO 事件处理框架。服务器启动时调用一次。
+ *
+ * @param io            - Socket.IO 服务器实例
+ * @param roomManager   - 房间管理器（管理房间创建/加入/离开）
+ * @param pluginLoader  - 插件加载器（获取游戏插件）
+ * @param userStore     - 用户存储（可选，用于认证）
+ * @param serverConfig  - 服务器配置（可选，用于服务器密码验证）
+ *
+ * 调用处：server/src/index.ts → setupSocketFramework(io, roomManager, pluginLoader, ...)
+ */
 export function setupSocketFramework(
   io: Server,
   roomManager: RoomManager,
@@ -21,18 +57,29 @@ export function setupSocketFramework(
   userStore?: UserStore,
   serverConfig?: ServerConfig
 ): void {
-  // Instance-scoped state: each setupSocketFramework call gets its own maps
-  const actionTimestamps = new Map<string, number>()
-  const disconnectTimers = new Map<string, NodeJS.Timeout>()
-  const playAgainRequests = new Map<string, Set<string>>() // roomId -> Set of playerIds
-  const roomVersions = new Map<string, number>() // roomId -> version
+  // 每次调用创建独立的状态（避免多次调用时共享）
+  const actionTimestamps = new Map<string, number>()     // 玩家 → 上次操作时间戳
+  const disconnectTimers = new Map<string, NodeJS.Timeout>() // 玩家 → 断线判负计时器
+  const playAgainRequests = new Map<string, Set<string>>()  // 房间 → 再来一局的请求集合
+  const roomVersions = new Map<string, number>()            // 房间 → 状态版本号（递增）
 
-  // --- Auth middleware (io.use) ---
+  /**
+   * 认证中间件。每个客户端连接时，在进入业务事件处理前先经过这里。
+   *
+   * 类比 Java Spring：相当于 @Before 拦截器或 Filter。
+   *
+   * 校验顺序：
+   *   1. 服务器密码（如果配置了的话）
+   *   2. 客户端版本兼容性（主版本号必须相同）
+   *   3. 用户 token（如果服务器有注册用户）
+   *
+   * 校验失败时 next(error) 会拒绝连接，客户端收到 connect_error 事件。
+   */
   if (userStore && serverConfig) {
     io.use((socket, next) => {
       const auth = socket.handshake.auth as any
 
-      // Step 1: Check server password if required
+      // Step 1: 服务器密码验证
       if (serverConfig.requirePassword()) {
         const serverPassword = auth?.serverPassword
         if (!serverPassword) {
@@ -43,26 +90,24 @@ export function setupSocketFramework(
         }
       }
 
-      // Step 2: Check client version compatibility
+      // Step 2: 版本兼容性检查（主版本号必须相同）
       const clientVersion = auth?.clientVersion
       if (clientVersion && !isCompatible(clientVersion, PROTOCOL_VERSION)) {
         logger.warn(`Client version ${clientVersion} incompatible with server ${PROTOCOL_VERSION}`)
         return next(new Error(`${AuthErrors.VERSION_INCOMPATIBLE}:${PROTOCOL_VERSION}`))
       }
 
-      // Step 3: Verify user token
+      // Step 3: 用户 token 验证
       const token = auth?.token
       if (token) {
         const result = userStore.verifyToken(token)
         if (!result.valid) {
           return next(new Error(result.error || AuthErrors.TOKEN_INVALID))
         }
-        // Attach username to socket data
-        socket.data.username = result.username
+        socket.data.username = result.username  // 绑定到 socket 数据，后续事件可用
       } else if (userStore.hasUsers()) {
-        // No token provided, but users exist — auth is required
-        // Allow connection but mark as unauthenticated
-        // (the player:hello handler will use a temporary identity)
+        // 无 token 但服务器有注册用户 → 允许连接但标记为未认证
+        // player:hello 会使用临时身份
         socket.data.username = null
       }
 
@@ -80,17 +125,26 @@ export function setupSocketFramework(
     return true
   }
 
+  /**
+   * 向房间内所有玩家推送最新状态。每次 handleEvent 成功后调用。
+   *
+   * 关键设计：为每个玩家单独生成 getClientState（各自视角不同），
+   * 然后通过私有 socket 通道推送（不用 io.to(room).emit 广播）。
+   *
+   * @param version - 状态版本号（递增），客户端可用于检测乱序/丢包
+   */
   function broadcastState(io: Server, room: any, plugin: any, roomManager: RoomManager): void {
-    // Increment version
     const currentVersion = roomVersions.get(room.id) || 0
     const newVersion = currentVersion + 1
     roomVersions.set(room.id, newVersion)
 
     const sent: string[] = []
     for (const player of room.players) {
+      // 为每个玩家生成各自的视角（隐藏其他玩家手牌）
       const clientState = plugin.getClientState(room.state, player.id)
       const socketId = roomManager.getSocketId(player.id)
       if (socketId) {
+        // 私有通道推送（只有该玩家能看到自己的手牌）
         io.to(socketId).emit('game:stateUpdate', { state: clientState, version: newVersion, gameId: room.gameId })
         sent.push(player.id)
       } else {
@@ -371,7 +425,22 @@ export function setupSocketFramework(
       broadcastRoomList(io, roomManager)
     })
 
-    // Game action forwarded to plugin
+    /**
+     * 游戏操作处理。客户端通过 onAction() 发送的事件都到达这里。
+     *
+     * 处理流程：
+     *   1. 输入验证（event 非空、频率限制）
+     *   2. 身份验证（playerId 存在、在房间中、游戏进行中）
+     *   3. 委托给 plugin.handleEvent() 处理游戏逻辑
+     *   4. 如果有错误 → 返回 game:error
+     *   5. 更新房间状态
+     *   6. 广播附加事件（如语音、特效）
+     *   7. broadcastState 推送新状态给所有玩家
+     *   8. checkGameEnd 判定是否结束
+     *
+     * 客户端调用方式：socket.emit('game:action', { event: 'play', payload: { cards } })
+     * 对应 handleEvent 参数：event='play', payload={ cards }
+     */
     socket.on('game:action', ({ event, payload }: { event: string; payload: any }) => {
       if (!event || typeof event !== 'string') {
         socket.emit('game:error', { reason: '无效的事件名' })
@@ -381,6 +450,7 @@ export function setupSocketFramework(
       const playerId = roomManager.getPlayerId(socket.id)
       if (!playerId) return
 
+      // 频率限制：防止客户端刷操作
       if (!checkRateLimit(playerId)) {
         socket.emit('game:error', { reason: '操作过于频繁' })
         return
@@ -403,15 +473,17 @@ export function setupSocketFramework(
       const plugin = pluginLoader.getPlugin(room.gameId)
       if (!plugin) return
 
+      // 【核心】委托给游戏插件处理逻辑
       const result = plugin.handleEvent(room.state, playerId, event, payload)
       if (result.error) {
         socket.emit('game:error', { reason: result.error })
         return
       }
 
+      // 更新房间状态
       room.state = result.state
 
-      // Broadcast events with target control
+      // 广播附加事件（语音、特效等），支持 target 控制推送范围
       if (result.broadcast) {
         for (const msg of result.broadcast) {
           const target = msg.target || 'all'
@@ -425,9 +497,10 @@ export function setupSocketFramework(
         }
       }
 
+      // 推送新状态给所有玩家（每人各自视角）
       broadcastState(io, room, plugin, roomManager)
 
-      // Check game end
+      // 检查游戏是否结束
       const shouldCheckEnd = result.checkEndNow !== false
       if (shouldCheckEnd) {
         const winnerId = plugin.checkGameEnd(room.state)

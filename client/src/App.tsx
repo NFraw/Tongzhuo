@@ -1,3 +1,29 @@
+/**
+ * App.tsx — 客户端根组件
+ *
+ * 管理整个客户端的应用状态和页面路由。
+ * 类比 Java：相当于一个 MainController + Router。
+ *
+ * 应用阶段（AppPhase）：
+ *   connect  → 连接服务器界面
+ *   auth     → 登录/注册界面
+ *   lobby    → 大厅（房间列表、创建房间）
+ *   room     → 等待房间（玩家列表、准备、开始）
+ *   playing  → 游戏中（加载游戏插件组件）
+ *   paused   → 暂停（对手断线）
+ *   ended    → 结算（胜利/失败、再来一局）
+ *   settings → 设置（修改资料、退出登录）
+ *
+ * 架构设计：
+ *   - AppInner 是真正的业务组件，使用 useSocket/useAuth 等 Hook
+ *   - App 是根组件，包裹 AuthProvider（提供登录状态上下文）
+ *   - 游戏插件通过 registerClientPluginLoader() 懒加载
+ *
+ * 【如果你想添加新游戏】：
+ *   1. 在 registerClientPluginLoader() 中注册新的插件加载器
+ *   2. 在 server/src/index.ts 中注册对应的服务器插件
+ *   3. 实现 GameClientPlugin 接口（GameComponent + 可选 renderer）
+ */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSocket } from '@huiming/core-client/hooks/useSocket'
 import { useGamePlugin, registerClientPluginLoader } from '@huiming/core-client/hooks/useGamePlugin'
@@ -7,7 +33,7 @@ import { AuthScreen } from './components/AuthScreen'
 import { SettingsPage } from './components/SettingsPage'
 import type { ClientState, RoomSummary } from '@huiming/core-shared'
 
-// Register plugin loaders for lazy loading
+// 注册游戏插件懒加载器（import() 动态导入，首屏不加载游戏代码）
 registerClientPluginLoader('huiming', () =>
   import('huiming/ui/client-plugin').then(m => m.huimingClientPlugin)
 )
@@ -18,18 +44,25 @@ registerClientPluginLoader('nimmt', () =>
   import('nimmt/ui/client-plugin').then(m => m.nimmtClientPlugin)
 )
 
+/** 从 localStorage 获取 playerId（不存在则生成） */
 function getStoredPlayerId(): string {
   let id = localStorage.getItem('huiming-player-id')
   if (!id) { id = crypto.randomUUID(); localStorage.setItem('huiming-player-id', id) }
   return id
 }
+
+/** 从 localStorage 获取玩家昵称 */
 function getStoredPlayerName(): string {
   return localStorage.getItem('huiming-player-name') || 'Player'
 }
 
+/** 应用阶段类型 */
 type AppPhase = 'connect' | 'auth' | 'lobby' | 'room' | 'playing' | 'paused' | 'ended' | 'settings'
 
-/** All room-related state, always updated as a single unit from server events. */
+/**
+ * 房间视图状态。
+ * 所有房间相关状态作为一个整体更新，避免状态不一致。
+ */
 interface RoomView {
   roomId: string
   gameId: string
@@ -37,12 +70,12 @@ interface RoomView {
   players: { id: string; name: string; connected: boolean; ready: boolean }[]
 }
 
+/** 空房间初始值 */
 const EMPTY_ROOM: RoomView = { roomId: '', gameId: '', isHost: false, players: [] }
 
 /**
- * Waiting-room screen. Plays the welcome theme while players wait, looping until
- * the host starts the game (at which point this screen unmounts and the game
- * view takes over the soundtrack).
+ * 等待房间界面。
+ * 播放大厅 BGM，直到房主开始游戏（此组件卸载，游戏视图接管音频）。
  */
 function RoomScreen({
   room, error, playerId, allReady, copied,
@@ -115,9 +148,10 @@ function RoomScreen({
 }
 
 /**
- * Settlement screen. Resolves the winner correctly: role-based games (landlord)
- * compare the winning *role* against the player's own role, while it-based
- * games (huiming) compare winnerId against the player id.
+ * 结算界面。
+ * 正确处理两种胜利判定：
+ *   - 角色制游戏（斗地主）：比较获胜"角色"与玩家自己的角色
+ *   - ID 制游戏（晦明）：比较 winnerId 与玩家自己的 ID
  */
 function EndedScreen({
   winnerId, playerId, gameState, onPlayAgain, onLeaveRoom,
@@ -137,7 +171,7 @@ function EndedScreen({
     : winnerId === playerId
   const { setBgmScene } = useAudio()
   useEffect(() => {
-    setBgmScene(null)  // Game ended, stop BGM
+    setBgmScene(null)  // 游戏结束，停止 BGM
   }, [setBgmScene])
 
   const detail = roleWinner != null
@@ -170,6 +204,7 @@ function EndedScreen({
   )
 }
 
+/** 暂停界面（对手断线等待重连） */
 function PausedScreen({ onLeaveRoom }: { onLeaveRoom: () => void }) {
   return (
     <div className="lobby">
@@ -182,12 +217,13 @@ function PausedScreen({ onLeaveRoom }: { onLeaveRoom: () => void }) {
   )
 }
 
-/** Avatar SVG for lobby display */
+/** 头像颜色列表 */
 const AVATAR_COLORS = [
   '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#1abc9c',
   '#3498db', '#9b59b6', '#e84393', '#636e72', '#2d3436',
 ]
 
+/** 大厅头像 SVG 组件 */
 function LobbyAvatar({ id, size = 32 }: { id: number; size?: number }) {
   const color = AVATAR_COLORS[id] || AVATAR_COLORS[0]
   return (
@@ -199,26 +235,32 @@ function LobbyAvatar({ id, size = 32 }: { id: number; size?: number }) {
   )
 }
 
-/** Inner app component that uses auth context */
+/**
+ * 内部应用组件（使用 useSocket/useAuth 等 Hook）。
+ *
+ * 事件监听架构：
+ *   - 使用 useEffect 注册所有 Socket.IO 事件监听
+ *   - 每个事件更新对应的 React state
+ *   - state 变化驱动 UI 重新渲染
+ *   - 组件卸载时清理所有监听器
+ */
 function AppInner() {
   const { emit, on, playerId, connected, serverUrl, connectError, authError, serverPasswordRequired, connectedToken, connect, disconnect, serverHistory } = useSocket()
   const auth = useAuth()
   const [phase, setPhase] = useState<AppPhase>('connect')
 
-  // Sync socket's serverUrl into AuthContext so logout/updateProfile/refreshToken work
+  // 同步 socket 的 serverUrl 到 AuthContext（logout/updateProfile/refreshToken 需要）
   useEffect(() => {
     auth.setServerUrl(serverUrl)
   }, [serverUrl, auth.setServerUrl])
 
-  // Auto-login path: the socket connected with a saved token (server verified it
-  // and player:welcome brought back the profile), but the auth context only got
-  // the user via updateProfile — never the token, since auth.login was bypassed.
-  // Settings/profile APIs require auth.token, so sync it once connected.
+  // 自动登录路径：socket 用保存的 token 连接成功后，同步 token 到 AuthContext
   useEffect(() => {
     if (connected && connectedToken && auth.user && !auth.token) {
       auth.setToken(connectedToken)
     }
   }, [connected, connectedToken, auth.user, auth.token, auth.setToken])
+
   const [room, setRoom] = useState<RoomView>(EMPTY_ROOM)
   const [games, setGames] = useState<string[]>([])
   const [rooms, setRooms] = useState<RoomSummary[]>([])
@@ -232,22 +274,21 @@ function AppInner() {
   const pendingRetryRef = useRef<{ event: string; payload: any } | null>(null)
   const gamePlugin = useGamePlugin(room.gameId)
 
-  // Listen for events
+  // ─── 事件监听 ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!connected) return
 
     const cleanups = [
+      // 握手成功：收到服务器欢迎消息
       on('player:welcome', ({ playerId: pid, games: gameList, userProfile }: { playerId: string; games: string[]; userProfile?: any }) => {
         setGames(gameList)
         if (userProfile) {
           auth.updateProfile(userProfile)
-          // Only change phase if coming from connect/auth (not when already in lobby/room/settings)
           setPhase(prev => prev === 'connect' || prev === 'auth' ? 'lobby' : prev)
         } else {
-          // Not authenticated — must login/register before entering
           setPhase('auth')
         }
-        // If there's a pending action from a NEED_HELLO retry, execute it now.
+        // 如果有待重试的操作（NEED_HELLO），现在执行
         const pending = pendingRetryRef.current
         if (pending) {
           pendingRetryRef.current = null
@@ -257,6 +298,7 @@ function AppInner() {
       on('rooms:list', (roomList: RoomSummary[]) => {
         setRooms(roomList)
       }),
+      // 房间创建成功
       on('room:created', (data: { roomId: string; gameId: string; hostId: string; playerList: { id: string; name: string; connected: boolean; ready: boolean }[]; isHost: boolean }) => {
         console.log('[room:created]', { roomId: data.roomId, gameId: data.gameId, isHost: data.isHost, players: data.playerList.length })
         pendingRetryRef.current = null
@@ -266,6 +308,7 @@ function AppInner() {
         setRoom({ roomId: data.roomId, gameId: data.gameId, isHost: data.isHost, players: data.playerList })
         setPhase('room')
       }),
+      // 加入房间成功
       on('room:joined', (data: { gameId: string; playerList: { id: string; name: string; connected: boolean; ready: boolean }[]; isHost: boolean; roomId: string }) => {
         pendingRetryRef.current = null
         stateVersionRef.current = 0
@@ -274,6 +317,7 @@ function AppInner() {
         setRoom({ roomId: data.roomId, gameId: data.gameId, isHost: data.isHost, players: data.playerList })
         setPhase('room')
       }),
+      // 房间状态更新（有人加入/离开/准备）
       on('room:updated', (data: { roomId: string; gameId: string; playerList: { id: string; name: string; connected: boolean; ready: boolean }[]; isHost: boolean }) => {
         setRoom({ roomId: data.roomId, gameId: data.gameId, isHost: data.isHost, players: data.playerList })
         if (phase === 'connect' || phase === 'lobby' || phase === 'auth') {
@@ -287,9 +331,10 @@ function AppInner() {
         setGameState(null)
         setWinnerId(null)
       }),
+      // 游戏状态更新（核心：每收到一次就刷新整个游戏 UI）
       on('game:stateUpdate', ({ state, version, gameId }: { state: ClientState; version?: number; gameId?: string }) => {
         if (version !== undefined && version < stateVersionRef.current) {
-          return
+          return  // 忽略过时的状态
         }
         setGameState(state)
         if (version !== undefined) {
@@ -302,6 +347,7 @@ function AppInner() {
           setPhase('playing')
         }
       }),
+      // 游戏错误（临时提示）
       on('game:error', ({ reason }: { reason: string }) => {
         setError(reason)
         setTimeout(() => setError(null), 3000)
@@ -310,6 +356,7 @@ function AppInner() {
         setError('对手已断开连接，等待重连…')
         setTimeout(() => setError(null), 5000)
       }),
+      // 房间错误（NEED_HELLO 时自动重试）
       on('room:error', ({ reason, code }: { reason: string; code?: string }) => {
         if (code === 'NEED_HELLO') {
           const pending = pendingRetryRef.current
@@ -332,6 +379,7 @@ function AppInner() {
         setError('房间不存在')
         setTimeout(() => setError(null), 3000)
       }),
+      // 游戏结束
       on('game:over', ({ winnerId: wid }: { winnerId: string }) => {
         setWinnerId(wid)
         setPhase('ended')
@@ -346,6 +394,7 @@ function AppInner() {
         setWinnerId(wid)
         setPhase('ended')
       }),
+      // 有人离开房间
       on('room:playerLeft', ({ playerId: pid, isHost: leftWasHost, dissolved }: { playerId: string; isHost: boolean; dissolved?: boolean }) => {
         if (dissolved) {
           setError(leftWasHost ? '房主已离开，房间已解散' : '对手已离开，房间已解散')
@@ -365,26 +414,25 @@ function AppInner() {
     return () => cleanups.forEach(fn => fn())
   }, [on, phase, connected, auth])
 
-  // Auto-connect on first boot
+  // ─── 自动连接 ─────────────────────────────────────────────────────────
   const didAutoConnectRef = useRef(false)
   useEffect(() => {
     const origin = window.location.origin
     if (!didAutoConnectRef.current && phase === 'connect' && !connected && origin.startsWith('http')) {
       didAutoConnectRef.current = true
-      // Check if we have saved credentials for this origin
       const savedToken = auth.getSavedCredential(origin)?.token
       connect(origin, savedToken ? { token: savedToken } : undefined)
     }
   }, [phase, connected, connect, auth])
 
-  // Handle auth errors — transition to auth phase
+  // Token 错误时切换到登录界面
   useEffect(() => {
     if (authError && phase !== 'auth') {
       setPhase('auth')
     }
   }, [authError, phase])
 
-  // Auto-join if URL has roomId
+  // URL 有 ?join=roomId 时自动加入房间
   useEffect(() => {
     if (connected && phase === 'lobby') {
       const params = new URLSearchParams(window.location.search)
@@ -396,9 +444,9 @@ function AppInner() {
     }
   }, [connected, phase, emit])
 
+  // ─── 事件处理函数 ─────────────────────────────────────────────────────
   const handleConnect = useCallback((url: string, serverPassword?: string) => {
     if (!url) return
-    // Check for saved token
     const savedToken = auth.getSavedCredential(url)?.token
     connect(url, { token: savedToken || undefined, serverPassword })
   }, [connect, auth])
@@ -406,7 +454,6 @@ function AppInner() {
   const handleAuthSuccess = useCallback((token: string, username: string, user: any) => {
     auth.login(token, username, user)
     auth.saveCredential(serverUrl || '', username, token, user.displayName)
-    // Reconnect with token
     if (serverUrl) {
       connect(serverUrl, { token })
     }
@@ -453,6 +500,7 @@ function AppInner() {
     })
   }, [room.roomId])
 
+  /** 发送游戏动作到服务器 */
   const handleAction = useCallback((event: string, payload: any) => {
     emit('game:action', { event, payload })
   }, [emit])
@@ -481,7 +529,9 @@ function AppInner() {
     emit('room:start')
   }, [emit])
 
-  // Auth phase
+  // ─── 页面路由 ─────────────────────────────────────────────────────────
+
+  // 登录/注册页面
   if (phase === 'auth' && serverUrl) {
     return (
       <AuthScreen
@@ -495,10 +545,7 @@ function AppInner() {
     )
   }
 
-  // Settings phase. Rendered unconditionally so it can never fall through to
-  // the playing-phase loading fallback; if the session was lost while the
-  // settings page was open (token cleared, disconnected, etc.) show a recovery
-  // screen instead.
+  // 设置页面（无条件渲染，避免会话丢失时卡在加载中）
   if (phase === 'settings') {
     if (auth.user && auth.token && serverUrl) {
       return (
@@ -532,7 +579,7 @@ function AppInner() {
     )
   }
 
-  // Connect phase
+  // 连接页面
   if (phase === 'connect') {
     return (
       <div className="lobby">
@@ -589,7 +636,7 @@ function AppInner() {
     )
   }
 
-  // Lobby phase
+  // 大厅页面
   if (phase === 'lobby') {
     return (
       <div className="lobby">
@@ -656,7 +703,7 @@ function AppInner() {
     )
   }
 
-  // Room phase
+  // 等待房间页面
   if (phase === 'room') {
     const allReady = room.players.length > 0 && room.players.every(p => p.ready)
     return (
@@ -674,12 +721,12 @@ function AppInner() {
     )
   }
 
-  // Paused phase
+  // 暂停页面
   if (phase === 'paused') {
     return <PausedScreen onLeaveRoom={handleLeaveRoom} />
   }
 
-  // Ended phase
+  // 结算页面
   if (phase === 'ended') {
     return (
       <EndedScreen
@@ -692,7 +739,7 @@ function AppInner() {
     )
   }
 
-  // Playing phase — the only phase that may show the loading fallback.
+  // 游戏中页面（唯一可能显示"加载中"的阶段）
   if (phase === 'playing') {
     if (!gameState || !gamePlugin) {
       return <div className="lobby"><p>加载中...</p></div>
@@ -717,11 +764,11 @@ function AppInner() {
     )
   }
 
-  // Unknown phase — never fall through to the loading screen.
+  // 未知阶段（防御性代码，不应到达）
   return null
 }
 
-/** Root component wraps with AuthProvider */
+/** 根组件：包裹 AuthProvider（提供登录状态上下文） */
 export function App() {
   return (
     <AuthProvider>

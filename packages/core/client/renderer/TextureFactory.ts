@@ -1,54 +1,86 @@
 /**
- * TextureFactory — lazily generates PIXI.Texture objects from offscreen canvas.
+ * TextureFactory — 离屏 canvas 光栅化卡牌纹理工厂
  *
- * Each card is rasterized once at `CARD_W * dpr × CARD_H * dpr` (DPR capped at 2)
- * and cached in a Map. Total memory for all 54 face textures + 1 back texture is
- * well under 1 MB even at DPR=2.
+ * 将卡牌绘制到离屏 canvas，然后转为 PIXI.Texture 供 Sprite 使用。
+ * 类比 C++：相当于一个 TextureManager，管理所有卡牌纹理的生成和缓存。
+ *
+ * 纹理生成策略：
+ *   - 懒加载：首次 getTexture(suit, rank) 时才生成，生成后 Map 缓存
+ *   - 全量预热：prewarmAllCards() 在渲染器挂载时一次性生成 54 张纹理
+ *   - 内存占用：DPR=2 时，54 张 × 72×100×4 = ~1.5MB，完全可接受
+ *
+ * 为什么用 canvas 光栅化而不是直接加载图片？
+ *   1. 不需要外部图片资源（减少打包体积和网络请求）
+ *   2. 可以精确控制卡牌样式（字体、颜色、布局）
+ *   3. 支持任意分辨率（DPR 自适应）
+ *
+ * 【如果你想修改卡牌外观】：
+ *   - drawFace()：正面牌面绘制（花色符号、点数、颜色）
+ *   - drawBack()：牌背绘制（蓝色菱形网格 + 星形徽章）
+ *   - drawTable()：牌桌背景（绿色毛毡）
+ *   - drawCardGlow()：选中光晕（金色边框）
+ *   - CARD_W / CARD_H：卡牌逻辑尺寸（CSS 像素）
  */
 import { Texture } from 'pixi.js'
 import type { Card } from '@huiming/core-shared'
 
+/** 卡牌逻辑宽度（CSS 像素） */
 export const CARD_W = 72
+/** 卡牌逻辑高度（CSS 像素） */
 export const CARD_H = 100
 
+/** 设备像素比，上限 2（避免高 DPI 设备纹理过大） */
 const DPR = Math.min(window.devicePixelRatio || 1, 2)
 
-// Pixi renders a Canvas texture at its *pixel* dimensions (Sprite.width =
-// scale × canvasPixelWidth), regardless of resolution. These are the actual
-// CSS-px sizes an un-scaled card sprite consumes, so layout can compute the
-// exact scale to render a card at a target logical width.
+/**
+ * 纹理的实际像素尺寸。
+ * PixiJS 渲染 canvas 纹理时使用其像素尺寸（而非 CSS 尺寸），
+ * 所以 Sprite.width = scale × canvasPixelWidth。
+ * 这些值用于 layout.ts 计算正确的 scale。
+ */
 export const CARD_TEX_W = CARD_W * DPR
 export const CARD_TEX_H = CARD_H * DPR
 
+/** 花色符号映射 */
 const SUIT_LABELS: Record<string, string> = {
   hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠',
   joker_red: '★', joker_black: '★',
 }
 
+/** 花色颜色映射（红/黑） */
 const SUIT_COLORS: Record<string, string> = {
   hearts: '#cc2222', diamonds: '#cc2222',
   clubs: '#222222', spades: '#222222',
   joker_red: '#cc2222', joker_black: '#222222',
 }
 
+/** 点数显示文本 */
 const RANK_DISPLAY: Record<string, string> = {
   A: 'A', '2': '2', '3': '3', '4': '4', '5': '5', '6': '6', '7': '7',
   '8': '8', '9': '9', '10': '10', J: 'J', Q: 'Q', K: 'K',
 }
 
+/** 生成缓存 key */
 function key(suit: string, rank: string): string {
   return `${suit}|${rank}`
 }
 
+/** 牌背的缓存 key */
 const BACK_KEY = '__back__'
+/** 牌桌背景的缓存 key */
 const TABLE_KEY = '__table__'
+/** 选中光晕的缓存 key */
 const GLOW_KEY = '__glow__'
 
-/** Lazily-filled cache. */
+/** 纹理缓存（懒加载） */
 const cache = new Map<string, Texture>()
 
-// ---------- internal canvas rendering helpers ----------
+// ─── 内部 canvas 绘制辅助函数 ─────────────────────────────────────────────
 
+/**
+ * 绘制圆角矩形路径。
+ * 类比 C++：相当于一个 drawRoundedRect 辅助函数。
+ */
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath()
   ctx.moveTo(x + r, y)
@@ -63,6 +95,19 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath()
 }
 
+/**
+ * 绘制卡牌正面。
+ *
+ * 布局：
+ *   - 左上角：点数 + 花色符号（小字）
+ *   - 右下角：点数 + 花色符号（旋转 180°，镜像）
+ *   - 中央：大号花色符号（带发光阴影）
+ *   - Joker：中央大号 ★ + "JOKER" 文字
+ *
+ * @param suit - 花色（hearts/diamonds/clubs/spades/joker_red/joker_black）
+ * @param rank - 点数（A/2~10/J/Q/K，或 JOKER）
+ * @returns 离屏 canvas 元素
+ */
 function drawFace(suit: string, rank: string): HTMLCanvasElement {
   const w = CARD_W * DPR
   const h = CARD_H * DPR
@@ -72,7 +117,7 @@ function drawFace(suit: string, rank: string): HTMLCanvasElement {
   canvas.height = h
   const ctx = canvas.getContext('2d')!
 
-  // Background — subtle radial gradient from pure white to a faint grey edge
+  // 背景：白色到浅灰的线性渐变
   const bg = ctx.createLinearGradient(0, 0, 0, h)
   bg.addColorStop(0, '#ffffff')
   bg.addColorStop(1, '#f4f4f4')
@@ -80,7 +125,7 @@ function drawFace(suit: string, rank: string): HTMLCanvasElement {
   ctx.fillStyle = bg
   ctx.fill()
 
-  // Outer border (thin grey) + inner highlight (crisp white inset)
+  // 外边框（灰色）+ 内高光（白色凹陷）
   roundRect(ctx, 0.5 * DPR, 0.5 * DPR, w - 1 * DPR, h - 1 * DPR, r)
   ctx.strokeStyle = '#c9c9c9'
   ctx.lineWidth = 1.5 * DPR
@@ -95,7 +140,7 @@ function drawFace(suit: string, rank: string): HTMLCanvasElement {
   const rankText = RANK_DISPLAY[rank] || rank
 
   if (suit === 'joker_red' || suit === 'joker_black') {
-    // Joker layout: large ★ in center with glow, "JOKER" text
+    // Joker 布局：中央大号 ★（带发光）+ "JOKER" 文字
     ctx.save()
     ctx.shadowColor = color
     ctx.shadowBlur = 8 * DPR
@@ -112,11 +157,10 @@ function drawFace(suit: string, rank: string): HTMLCanvasElement {
     ctx.textBaseline = 'middle'
     ctx.fillText('JOKER', w / 2, h / 2 + 18 * DPR)
   } else {
-    // Standard card: corner indices (top-left upright, bottom-right upside-down)
-    // and a large central suit mark.
+    // 标准牌布局
     ctx.fillStyle = color
 
-    // Top-left rank (small shadow for legibility)
+    // 左上角：点数 + 花色（小字，带阴影增加可读性）
     ctx.save()
     ctx.shadowColor = 'rgba(0,0,0,0.25)'
     ctx.shadowBlur = 1.5 * DPR
@@ -128,7 +172,7 @@ function drawFace(suit: string, rank: string): HTMLCanvasElement {
     ctx.fillText(suitLabel, 6 * DPR, 23 * DPR)
     ctx.restore()
 
-    // Bottom-right rank + suit, rotated 180° (mirrors the top-left corner)
+    // 右下角：点数 + 花色（旋转 180°，镜像左上角）
     ctx.save()
     ctx.shadowColor = 'rgba(0,0,0,0.25)'
     ctx.shadowBlur = 1.5 * DPR
@@ -142,7 +186,7 @@ function drawFace(suit: string, rank: string): HTMLCanvasElement {
     ctx.fillText(suitLabel, 0, 17 * DPR)
     ctx.restore()
 
-    // Center large suit with soft glow
+    // 中央：大号花色符号（带柔和发光）
     ctx.save()
     ctx.shadowColor = color
     ctx.shadowBlur = 6 * DPR
@@ -156,6 +200,11 @@ function drawFace(suit: string, rank: string): HTMLCanvasElement {
   return canvas
 }
 
+/**
+ * 绘制牌背。
+ *
+ * 设计：蓝色渐变背景 + 菱形网格 + 中央星形徽章。
+ */
 function drawBack(): HTMLCanvasElement {
   const w = CARD_W * DPR
   const h = CARD_H * DPR
@@ -165,18 +214,18 @@ function drawBack(): HTMLCanvasElement {
   canvas.height = h
   const ctx = canvas.getContext('2d')!
 
-  // Rounded rect clip
+  // 圆角裁剪
   roundRect(ctx, 0, 0, w, h, r)
   ctx.clip()
 
-  // Gradient background
+  // 蓝色渐变背景
   const grad = ctx.createLinearGradient(0, 0, 0, h)
   grad.addColorStop(0, '#2b5aa8')
   grad.addColorStop(1, '#16315e')
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, w, h)
 
-  // Diamond-grid pattern overlay
+  // 菱形网格装饰
   ctx.strokeStyle = 'rgba(255,255,255,0.10)'
   ctx.lineWidth = 1 * DPR
   const step = 12 * DPR
@@ -191,19 +240,19 @@ function drawBack(): HTMLCanvasElement {
     ctx.stroke()
   }
 
-  // Inner border inset highlight
+  // 内边框高光
   roundRect(ctx, 3 * DPR, 3 * DPR, w - 6 * DPR, h - 6 * DPR, r - 2 * DPR)
   ctx.strokeStyle = 'rgba(255,255,255,0.30)'
   ctx.lineWidth = 1.2 * DPR
   ctx.stroke()
 
-  // Border
+  // 外边框
   roundRect(ctx, 0.5 * DPR, 0.5 * DPR, w - 1 * DPR, h - 1 * DPR, r)
   ctx.strokeStyle = '#3a6bc5'
   ctx.lineWidth = 1.5 * DPR
   ctx.stroke()
 
-  // Central star medallion with glow ring
+  // 中央星形徽章
   const cx = w / 2
   const cy = h / 2
   ctx.fillStyle = 'rgba(255,255,255,0.12)'
@@ -219,8 +268,11 @@ function drawBack(): HTMLCanvasElement {
   return canvas
 }
 
+/**
+ * 绘制牌桌背景。
+ * 绿色毛毡效果：径向渐变 + 随机噪点 + 中央椭圆高光。
+ */
 function drawTable(): HTMLCanvasElement {
-  // Fixed logical size — stretched/sampled to cover the screen.
   const w = 1024
   const h = 768
   const canvas = document.createElement('canvas')
@@ -228,7 +280,7 @@ function drawTable(): HTMLCanvasElement {
   canvas.height = h
   const ctx = canvas.getContext('2d')!
 
-  // Radial green felt: bright center, dark edges
+  // 径向渐变：中心亮绿，边缘暗绿
   const grad = ctx.createRadialGradient(w / 2, h / 2, h * 0.15, w / 2, h / 2, w * 0.7)
   grad.addColorStop(0, '#2f7d3e')
   grad.addColorStop(0.55, '#226028')
@@ -236,7 +288,7 @@ function drawTable(): HTMLCanvasElement {
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, w, h)
 
-  // Subtle felt speckle for texture
+  // 随机噪点（模拟毛毡纹理）
   for (let i = 0; i < 900; i++) {
     const x = Math.random() * w
     const y = Math.random() * h
@@ -245,7 +297,7 @@ function drawTable(): HTMLCanvasElement {
     ctx.fillRect(x, y, 2, 2)
   }
 
-  // Central ellipse table highlight
+  // 中央椭圆高光
   ctx.strokeStyle = 'rgba(255,255,255,0.08)'
   ctx.lineWidth = 3
   ctx.beginPath()
@@ -255,10 +307,11 @@ function drawTable(): HTMLCanvasElement {
   return canvas
 }
 
+/**
+ * 绘制选中光晕。
+ * 透明中心 + 金色柔和光边，作为卡牌子 Sprite 叠加显示。
+ */
 function drawCardGlow(): HTMLCanvasElement {
-  // Same logical size as a card face, but drawn with a transparent centre and a
-  // soft warm halo around the edges. Placed as a slightly scaled child of a card
-  // sprite, it forms a gentle "selected/ready" ring just outside the card face.
   const w = CARD_W * DPR
   const h = CARD_H * DPR
   const r = 8 * DPR
@@ -267,7 +320,7 @@ function drawCardGlow(): HTMLCanvasElement {
   canvas.height = h
   const ctx = canvas.getContext('2d')!
 
-  // Outer soft glow (large blur)
+  // 外层柔和光晕（大模糊）
   ctx.shadowColor = 'rgba(255,207,64,0.85)'
   ctx.shadowBlur = 16 * DPR
   ctx.strokeStyle = 'rgba(255,207,64,0.55)'
@@ -275,7 +328,7 @@ function drawCardGlow(): HTMLCanvasElement {
   roundRect(ctx, 1 * DPR, 1 * DPR, w - 2 * DPR, h - 2 * DPR, r)
   ctx.stroke()
 
-  // Crisp inner ring
+  // 内层清晰光环
   ctx.shadowBlur = 4 * DPR
   ctx.shadowColor = 'rgba(255,220,120,0.9)'
   ctx.strokeStyle = 'rgba(255,224,130,0.95)'
@@ -286,10 +339,14 @@ function drawCardGlow(): HTMLCanvasElement {
   return canvas
 }
 
-// ---------- public API ----------
+// ─── 公开 API ─────────────────────────────────────────────────────────────
 
 /**
- * Get (or lazily create) the face texture for a card.
+ * 获取卡牌正面纹理（懒加载 + 缓存）。
+ *
+ * @param suit - 花色
+ * @param rank - 点数
+ * @returns PIXI.Texture
  */
 export function getCardTexture(suit: string, rank: string): Texture {
   const k = key(suit, rank)
@@ -297,14 +354,13 @@ export function getCardTexture(suit: string, rank: string): Texture {
   if (tex) return tex
 
   const canvas = drawFace(suit, rank)
-  tex = Texture.from(canvas, true) // skipCache=true — we manage the cache
+  tex = Texture.from(canvas, true) // skipCache=true — 我们自己管理缓存
   cache.set(k, tex)
   return tex
 }
 
 /**
- * Get the shared green-felt table background texture.
- * A single texture is stretched to cover the whole canvas.
+ * 获取牌桌背景纹理（单例）。
  */
 export function getTableTexture(): Texture {
   let tex = cache.get(TABLE_KEY)
@@ -317,7 +373,7 @@ export function getTableTexture(): Texture {
 }
 
 /**
- * Get the shared card-back texture.
+ * 获取牌背纹理（单例，所有对手共享）。
  */
 export function getCardBackTexture(): Texture {
   let tex = cache.get(BACK_KEY)
@@ -330,7 +386,7 @@ export function getCardBackTexture(): Texture {
 }
 
 /**
- * Get the shared selection-halo texture (transparent centre + warm edge glow).
+ * 获取选中光晕纹理（单例）。
  */
 export function getCardGlowTexture(): Texture {
   let tex = cache.get(GLOW_KEY)
@@ -343,25 +399,28 @@ export function getCardGlowTexture(): Texture {
 }
 
 /**
- * Convenience: get texture for a Card object.
+ * 便捷函数：根据 Card 对象获取纹理。
  */
 export function textureForCard(card: Card): Texture {
   return getCardTexture(card.suit, card.rank)
 }
 
 /**
- * Pre-warm the cache with textures for a set of cards (e.g. the initial deal).
- * Purely optional — getCardTexture is lazy by design.
+ * 预热缓存：为一组卡牌预先生成纹理。
+ * 纯可选——getCardTexture 本身就是懒加载的。
  */
 export function prewarm(cards: Card[]): void {
   for (const c of cards) getCardTexture(c.suit, c.rank)
 }
 
 /**
- * Pre-warm the entire 54-card deck (4 suits × 13 ranks + 2 jokers) in one go.
- * Called once at renderer mount. Card texture rasterization is synchronous and
- * uses shadow blur, so generating a card mid-animation causes a frame hitch;
- * warming the whole deck up-front removes every mid-play spike.
+ * 预热整副牌（4 花色 × 13 点数 + 2 Joker = 54 张）。
+ * 渲染器挂载时调用一次，避免对局中生成纹理导致帧率抖动。
+ *
+ * 为什么需要预热？
+ *   卡牌纹理使用 shadow blur 生成，是同步阻塞操作。
+ *   如果在出牌动画中首次生成纹理，会导致那一帧卡顿。
+ *   提前生成所有纹理，消除对局中的卡顿风险。
  */
 export function prewarmAllCards(): void {
   const suits = ['hearts', 'diamonds', 'clubs', 'spades']
@@ -374,16 +433,17 @@ export function prewarmAllCards(): void {
 }
 
 /**
- * Destroy all cached textures and free GPU memory.
+ * 销毁所有缓存纹理，释放 GPU 内存。
+ * 组件卸载时调用。
  */
 export function destroyAllTextures(): void {
   for (const tex of cache.values()) {
-    try { tex.destroy(true) } catch { /* already destroyed */ }
+    try { tex.destroy(true) } catch { /* 已销毁 */ }
   }
   cache.clear()
 }
 
-/** Current cache size (for debug HUD). */
+/** 当前缓存大小（调试 HUD 用） */
 export function textureCacheSize(): number {
   return cache.size
 }

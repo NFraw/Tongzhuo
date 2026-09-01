@@ -1,3 +1,28 @@
+/**
+ * LandlordGame.tsx — 斗地主游戏客户端组件
+ *
+ * 这是斗地主的"主视图"，负责：
+ *   1. 渲染游戏 UI（手牌、对手、出牌区、按钮）
+ *   2. 处理用户交互（选牌、出牌、叫分）
+ *   3. 管理 BGM 和语音音效
+ *   4. 连接 PixiJS canvas 渲染器（或 CSS 兜底）
+ *
+ * 架构：
+ *   - canvasOk=true → 使用 PixiJS canvas 渲染（GameCanvas + React HUD overlay）
+ *   - canvasOk=false → 降级到纯 CSS 渲染（旧方案）
+ *   - WebGL 不可用或 localStorage['huiming-renderer']='css' → 强制 CSS
+ *
+ * React ↔ PixiJS 通信模型（防死循环）：
+ *   点击 Sprite → renderer 内部更新 selected → 上报 onSelectionChange
+ *   → React setSelectedIds → useEffect 调 renderer.sync()
+ *   → renderer diff 发现 selected 与镜像一致 → 跳过动画
+ *
+ * 【如果你想修改斗地主 UI】：
+ *   - canvas 路径：修改 LandlordRenderer.ts + layout.ts
+ *   - CSS 路径：修改本文件的 LandlordGameCSS 组件
+ *   - HUD（按钮、提示等）：修改 LandlordHUD 组件
+ *   - 语音：修改 pickVoice() 和音效触发逻辑
+ */
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import type { GameComponentProps, Card } from '@huiming/core-shared'
 import { GameCanvas } from '@huiming/core-client/renderer'
@@ -7,8 +32,17 @@ import { createLandlordRenderer } from './renderer'
 import type { LandlordClientState, HandType } from '../types'
 import './styles.css'
 
-// ─── Voice helpers (shared between canvas & CSS paths) ─────────────────────
+// ─── 语音辅助函数（canvas 和 CSS 路径共用） ─────────────────────────────────
 
+/**
+ * 将牌型主点数映射到语音文件编号。
+ *
+ * 映射规则：
+ *   3~K → 3~13
+ *   A → 1（语音文件中 A 排第一）
+ *   2 → 2
+ *   小王 → 14，大王 → 15
+ */
 function rankToVoiceIdx(rank: number): number {
   if (rank <= 13) return rank
   if (rank === 14) return 1
@@ -18,10 +52,30 @@ function rankToVoiceIdx(rank: number): number {
   return 3
 }
 
+/** 从数组中随机选一个元素 */
 function randPick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
+/**
+ * 根据牌型选择语音文件。
+ *
+ * 文件位置：client/public/audio/voice/
+ *
+ * 牌型 → 语音文件映射：
+ *   single → dan{v}.ogg（单张）
+ *   pair → dui{v}.ogg（对子）
+ *   triple → tuple{v}.ogg（三条）
+ *   triple_one → sandaiyi.ogg（三带一）
+ *   triple_two → sandaiyidui.ogg（三带二）
+ *   straight → shunzi.ogg（顺子）
+ *   double_straight → liandui.ogg（连对）
+ *   plane/plane_single/plane_pair → feiji.ogg（飞机）
+ *   four_two → sidaier.ogg（四带二）
+ *   four_two_pair → sidailiangdui.ogg（四带两对）
+ *   bomb → zhadan.ogg（炸弹）
+ *   rocket → wangzha.ogg（王炸）
+ */
 function pickVoice(type: HandType, mainRank: number): string {
   const v = rankToVoiceIdx(mainRank)
   switch (type) {
@@ -43,19 +97,28 @@ function pickVoice(type: HandType, mainRank: number): string {
   }
 }
 
-// Resolve a seat index to a player's nickname (fall back to generic label).
+/** 根据座位索引获取玩家昵称 */
 function nameFor(s: LandlordClientState, playerNames: Record<string, string>, idx: number): string {
   return playerNames?.[s.playerIds?.[idx]] ?? `玩家${idx + 1}`
 }
 
-// ─── Main component ────────────────────────────────────────────────────────
+// ─── 主组件 ────────────────────────────────────────────────────────────────
 
+/**
+ * 斗地主游戏组件。
+ *
+ * 实现了 GameComponentProps 接口：
+ *   state       - 服务器同步的游戏状态
+ *   playerId    - 当前玩家 ID
+ *   onAction    - 发送游戏动作的回调
+ *   playerNames - 玩家 ID → 昵称映射
+ */
 export function LandlordGame({ state, playerId, onAction, playerNames = {} }: GameComponentProps) {
   const s = state as LandlordClientState
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [toast, setToast] = useState<string | null>(null)
 
-  // Canvas availability: try canvas first, fall back to CSS on failure
+  // canvas 可用性：优先尝试 canvas，失败则降级到 CSS
   const [canvasOk, setCanvasOk] = useState(() => {
     if (typeof window !== 'undefined' && localStorage.getItem('huiming-renderer') === 'css') return false
     return true
@@ -70,32 +133,34 @@ export function LandlordGame({ state, playerId, onAction, playerNames = {} }: Ga
   const isPlaying = s.currentPhase === 'playing'
   const opponentIndices = [0, 1, 2].filter(i => i !== s.myPlayerIndex)
 
-  // ─── Audio (shared between both paths) ──────────────────────────────────
+  // ─── 音频管理 ──────────────────────────────────────────────────────────
 
   const { playVoice, setBgmScene } = useAudio()
 
+  // 检测是否进入终局（任一方手牌 ≤ 3 张）
   const endgame = useMemo(
     () => [s.myHand.length, s.otherHandCounts[0], s.otherHandCounts[1]].some(c => c <= 3),
     [s.myHand.length, s.otherHandCounts]
   )
 
+  // BGM 场景计算
   const bgmScene = useMemo(() => {
-    if (s.winner) return null
-    if (endgame) return 'exciting'
-    if (s.currentPhase === 'bidding') return 'lobby'
-    return 'playing'
+    if (s.winner) return null          // 游戏结束 → 停止
+    if (endgame) return 'exciting'     // 终局 → 紧张 BGM
+    if (s.currentPhase === 'bidding') return 'lobby'  // 叫分 → 大厅 BGM
+    return 'playing'                   // 对局中 → 对局 BGM
   }, [s.winner, endgame, s.currentPhase])
 
   useEffect(() => {
-    // 场景切换；对局结束（s.winner）时 bgmScene 为 null 即停止
     setBgmScene(bgmScene)
   }, [bgmScene, setBgmScene])
 
-  // 兜底：游戏视图被卸载（对局结束切到结果页、退出房间、下一局）时强制停止 BGM，
-  // 避免因竞态导致 bgmScene 尚未变为 null 而残留原先的音乐。
+  // 兜底：游戏视图卸载时强制停止 BGM
   useEffect(() => {
     return () => setBgmScene(null)
   }, [setBgmScene])
+
+  // ─── 语音触发 ──────────────────────────────────────────────────────────
 
   const prevRef = useRef<{
     winner: string | null
@@ -109,10 +174,12 @@ export function LandlordGame({ state, playerId, onAction, playerNames = {} }: Ga
     const lp = s.gameInfo.lastPlay
     const pe = s.gameInfo.passEvent
 
+    // 胜利/失败语音
     if (p.winner !== s.winner && s.winner) {
       playVoice(s.winner === s.myRole ? 'yingle.mp3' : 'shule.mp3')
     }
 
+    // 出牌语音（检测出牌内容变化）
     const playChanged = lp && (
       lp.type !== p.lastPlay?.type ||
       lp.mainRank !== p.lastPlay?.mainRank ||
@@ -122,11 +189,13 @@ export function LandlordGame({ state, playerId, onAction, playerNames = {} }: Ga
 
     if (playChanged) {
       playVoice(pickVoice(lp.type, lp.mainRank))
+      // 炸弹/火箭额外播放爆炸音效
       if (lp.type === 'bomb' || lp.type === 'rocket') {
         playVoice('special_bomb.ogg')
       }
     }
 
+    // "不要"语音（pass 事件计数增加）
     if (pe > p.passEvent) {
       playVoice(randPick(['buyao1.ogg', 'buyao2.ogg', 'buyao3.ogg']))
     }
@@ -134,7 +203,7 @@ export function LandlordGame({ state, playerId, onAction, playerNames = {} }: Ga
     prevRef.current = { winner: s.winner, role: s.myRole, lastPlay: lp, passEvent: pe }
   }, [s.winner, s.myRole, s.gameInfo.lastPlay, s.gameInfo.passEvent, playVoice])
 
-  // ─── Actions ────────────────────────────────────────────────────────────
+  // ─── 操作处理 ──────────────────────────────────────────────────────────
 
   const handlePlay = useCallback(() => {
     const selectedCards = s.myHand.filter(c => selectedIds.has(c.id))
@@ -156,12 +225,13 @@ export function LandlordGame({ state, playerId, onAction, playerNames = {} }: Ga
     doAction('bid', { score })
   }, [doAction])
 
-  // Keyboard shortcuts (shared)
+  // 键盘快捷键
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setSelectedIds(new Set())
+        setSelectedIds(new Set())  // Esc 取消选牌
       } else if (e.key === 'Enter' && isPlaying && isMyTurn) {
+        // Enter 出牌
         const selectedCards = s.myHand.filter(c => selectedIds.has(c.id))
         if (selectedCards.length > 0) {
           doAction('play', { cards: selectedCards })
@@ -173,21 +243,22 @@ export function LandlordGame({ state, playerId, onAction, playerNames = {} }: Ga
     return () => window.removeEventListener('keydown', handler)
   }, [selectedIds, isPlaying, isMyTurn, s.myHand, doAction])
 
+  /** 当前是否可以 pass（必须有上一手出牌，且不是自己出的） */
   const canPassNow = !!(isPlaying && isMyTurn && s.gameInfo.lastPlay && s.gameInfo.lastPlayer !== s.myPlayerIndex)
 
-  // ─── Selection change from canvas renderer ──────────────────────────────
+  // ─── 从 canvas 渲染器接收选中变化 ──────────────────────────────────────
 
   const handleSelectionChange = useCallback((ids: Set<string>) => {
     setSelectedIds(ids)
   }, [])
 
-  // ─── Render ─────────────────────────────────────────────────────────────
+  // ─── 渲染 ─────────────────────────────────────────────────────────────
 
-  // Canvas path
+  // canvas 路径
   if (canvasOk) {
     return (
       <div className="landlord-game landlord-game--canvas">
-        {/* PixiJS canvas (fills the container) */}
+        {/* PixiJS canvas（铺满容器） */}
         <GameCanvas
           rendererFactory={createLandlordRenderer}
           state={state}
@@ -197,7 +268,7 @@ export function LandlordGame({ state, playerId, onAction, playerNames = {} }: Ga
           onUnavailable={() => setCanvasOk(false)}
         />
 
-        {/* React HUD overlay (on top of canvas) */}
+        {/* React HUD 覆盖层（在 canvas 之上） */}
         <LandlordHUD
           s={s}
           selectedIds={selectedIds}
@@ -216,7 +287,7 @@ export function LandlordGame({ state, playerId, onAction, playerNames = {} }: Ga
     )
   }
 
-  // CSS fallback path
+  // CSS 兜底路径
   return (
     <LandlordGameCSS
       s={s}
@@ -238,7 +309,7 @@ export function LandlordGame({ state, playerId, onAction, playerNames = {} }: Ga
   )
 }
 
-// ─── HUD overlay (React, sits on top of canvas) ───────────────────────────
+// ─── HUD 覆盖层（React，叠在 canvas 之上） ───────────────────────────────
 
 interface HUDProps {
   s: LandlordClientState
@@ -255,6 +326,19 @@ interface HUDProps {
   onBid: (score: number) => void
 }
 
+/**
+ * 斗地主 HUD（Heads-Up Display）覆盖层。
+ *
+ * 包含：
+ *   - 顶部：对手信息（昵称、角色、手牌数）
+ *   - 中央：叫分按钮 / 出牌按钮 / 倍数显示
+ *   - 底部：我的信息
+ *   - 胜利/失败覆盖层
+ *   - Toast 通知
+ *
+ * 这些都是 React 元素，叠在 PixiJS canvas 之上。
+ * canvas 负责卡牌视觉，HUD 负责文字和按钮。
+ */
 function LandlordHUD({
   s, selectedIds, isMyTurn, isBidding, isPlaying,
   opponentIndices, canPassNow, toast,
@@ -269,7 +353,7 @@ function LandlordHUD({
 
   return (
     <div className="landlord-hud">
-      {/* Top: opponent info bars + bottom cards label */}
+      {/* 顶部：对手信息 */}
       <div className="landlord-hud-top">
         <div className="landlord-hud-opp">
           <span className={`turn-dot ${s.currentTurn === opponentIndices[0] ? 'active' : ''}`} />
@@ -298,7 +382,7 @@ function LandlordHUD({
         </div>
       </div>
 
-      {/* Center: multiplier, bidding, action buttons */}
+      {/* 中央：叫分/出牌按钮 */}
       <div className="landlord-hud-center">
         {s.gameInfo.multiplier > 1 && (
           <div className="landlord-multiplier">{s.gameInfo.multiplier}倍</div>
@@ -353,7 +437,7 @@ function LandlordHUD({
         )}
       </div>
 
-      {/* Bottom: my info bar */}
+      {/* 底部：我的信息 */}
       <div className="landlord-hud-bottom">
         <span className={`turn-dot ${isMyTurn ? 'active' : ''}`} />
         <span>你</span>
@@ -366,7 +450,7 @@ function LandlordHUD({
         {s.gameInfo.baseScore > 0 && <span>底分 {s.gameInfo.baseScore}</span>}
       </div>
 
-      {/* Game over overlay */}
+      {/* 胜利/失败覆盖层 */}
       {s.winner && (
         <div className="landlord-game-over">
           <h2>{s.winner === s.myRole ? '你赢了！' : '你输了'}</h2>
@@ -377,13 +461,13 @@ function LandlordHUD({
         </div>
       )}
 
-      {/* Toast */}
+      {/* Toast 通知 */}
       {toast && <div className="landlord-toast">{toast}</div>}
     </div>
   )
 }
 
-// ─── CSS fallback (original rendering) ─────────────────────────────────────
+// ─── CSS 兜底渲染（旧方案） ─────────────────────────────────────────────────
 
 interface CSSProps {
   s: LandlordClientState
@@ -403,6 +487,11 @@ interface CSSProps {
   onBid: (score: number) => void
 }
 
+/**
+ * CSS 兜底渲染路径。
+ * 当 PixiJS/WebGL 不可用时使用，用纯 CSS + HTML 渲染卡牌。
+ * 功能与 canvas 路径完全相同，只是渲染方式不同。
+ */
 function LandlordGameCSS({
   s, selectedIds, setSelectedIds,
   isMyTurn, isBidding, isPlaying,
