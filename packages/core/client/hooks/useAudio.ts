@@ -1,27 +1,88 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-
-export type BgmScene = 'welcome' | 'normal' | 'normal2' | 'exciting' | 'win' | 'lose'
+import { useCallback, useEffect, useState } from 'react'
 
 /**
- * Sound files live under /audio/. BGM tracks are named `bgm/huaijiu_<scene>.<ext>`,
- * voice SFX are `voice/<name>.<ext>`. Audio is fetched lazily, so a missing file
- * simply produces no sound (never an error).
+ * 通用 BGM 场景 - 持续循环播放的背景音乐
+ * 所有游戏共享这些场景，每个游戏可以选择使用哪些场景
+ */
+export type BgmScene = 'lobby' | 'playing' | 'exciting' | 'victory' | 'defeat'
+
+/**
+ * 音频文件管理
  *
- * If a name already contains a dot (e.g. "爆炸.ogg"), it is used as-is;
- * otherwise ".mp3" is appended for backward compatibility.
+ * BGM 文件位于 /audio/bgm/，命名为 `bgm/huaijiu_<scene>.mp3`
+ * 语音 SFX 位于 /audio/voice/，命名为 `voice/<name>.<ext>`
+ *
+ * 如果文件名包含点号（如 "爆炸.ogg"），直接使用；
+ * 否则追加 ".mp3" 以保持向后兼容。
  */
 const BASE_AUDIO = 'audio'
 const BGM_EXT = '.mp3'
 
-// Module-level state so the soundtrack is a singleton across game views.
+// BGM 文件映射（预加载用）
+const BGM_URLS: Record<BgmScene, string> = {
+  lobby: `${BASE_AUDIO}/bgm/huaijiu_lobby${BGM_EXT}`,
+  playing: `${BASE_AUDIO}/bgm/huaijiu_playing${BGM_EXT}`,
+  exciting: `${BASE_AUDIO}/bgm/huaijiu_exciting${BGM_EXT}`,
+  victory: `${BASE_AUDIO}/bgm/huaijiu_victory${BGM_EXT}`,
+  defeat: `${BASE_AUDIO}/bgm/huaijiu_defeat${BGM_EXT}`,
+}
+
+// 旧文件名映射（向后兼容）
+const BGM_URLS_COMPAT: Record<string, string> = {
+  welcome: `${BASE_AUDIO}/bgm/huaijiu_welcome${BGM_EXT}`,
+  normal: `${BASE_AUDIO}/bgm/huaijiu_normal${BGM_EXT}`,
+  normal2: `${BASE_AUDIO}/bgm/huaijiu_normal2${BGM_EXT}`,
+  win: `${BASE_AUDIO}/bgm/huaijiu_win${BGM_EXT}`,
+  lose: `${BASE_AUDIO}/bgm/huaijiu_lose${BGM_EXT}`,
+}
+
+// 模块级单例状态
 let bgmEl: HTMLAudioElement | null = null
-let currentBgm: BgmScene | null = null
-let storedBgm: BgmScene | null = null // BGM requested before user gesture
+let currentScene: BgmScene | null = null
+let storedScene: BgmScene | null = null
 let audioContext: AudioContext | null = null
 let gestureHandler: (() => void) | null = null
-let stingEl: HTMLAudioElement | null = null
+let isUnlocked = false
 
-function ensureContext(): AudioContext | null {
+/**
+ * 解析音频文件路径
+ */
+function resolveUrl(path: string): string {
+  return path.startsWith('http') || path.startsWith('file:') ? path : `${BASE_AUDIO}/${path}`
+}
+
+/**
+ * 获取场景对应的 URL
+ */
+function getSceneUrl(scene: BgmScene | string): string {
+  // 优先使用新场景映射
+  if (scene in BGM_URLS) {
+    return BGM_URLS[scene as BgmScene]
+  }
+  // 回退到旧映射
+  if (scene in BGM_URLS_COMPAT) {
+    return BGM_URLS_COMPAT[scene]
+  }
+  // 直接作为文件名处理
+  return scene.includes('.') ? `bgm/${scene}` : `bgm/huaijiu_${scene}${BGM_EXT}`
+}
+
+/**
+ * 预加载所有 BGM 文件，避免切换时加载延迟
+ */
+export function preloadBgmFiles(): void {
+  const allUrls = [...Object.values(BGM_URLS), ...Object.values(BGM_URLS_COMPAT)]
+  allUrls.forEach(url => {
+    const audio = new Audio()
+    audio.preload = 'auto'
+    audio.src = url
+  })
+}
+
+/**
+ * 确保 AudioContext 存在且运行
+ */
+function ensureContext(): boolean {
   try {
     if (!audioContext) {
       const Ctx = (window.AudioContext || (window as any).webkitAudioContext)
@@ -30,127 +91,124 @@ function ensureContext(): AudioContext | null {
     if (audioContext.state === 'suspended') {
       audioContext.resume().catch(() => {})
     }
-    return audioContext
+    return audioContext.state === 'running'
   } catch {
-    return null
+    return false
   }
 }
 
-/** Resolve a public-path url. Works under http(s) and file:// (Vite base: './'). */
-function resolveUrl(path: string): string {
-  return path.startsWith('http') || path.startsWith('file:') ? path : `${BASE_AUDIO}/${path}`
+/**
+ * 设置 BGM 场景，只有场景变化时才切换
+ * @param scene - 新场景，null 表示停止
+ */
+export function setBgmScene(scene: BgmScene | null): void {
+  // 场景未变化，跳过
+  if (scene === currentScene) return
+
+  // 如果音频未解锁，缓存场景等待解锁
+  if (!isUnlocked) {
+    storedScene = scene
+    return
+  }
+
+  // 场景变化，切换 BGM
+  currentScene = scene
+  playBgm(scene)
 }
 
 /**
- * Play a one-shot sound effect. Fails silently if the file is missing or audio
- * is blocked. Returns a promise so callers may ignore it.
- *
- * If `name` contains a dot (e.g. "不出.ogg"), the full filename is used;
- * otherwise ".mp3" is appended.
+ * 获取当前 BGM 场景
+ */
+export function getCurrentScene(): BgmScene | null {
+  return currentScene
+}
+
+/**
+ * 播放一次性音效
+ * @param name - 音效文件名，如果包含点号则直接使用，否则追加 .mp3
  */
 export function playVoice(name: string): void {
   const file = name.includes('.') ? name : `${name}.mp3`
   try {
     const el = new Audio(resolveUrl(`voice/${file}`))
     el.preload = 'auto'
-    el.play().catch(() => { /* missing or autoplay-blocked, ignore */ })
+    el.play().catch(() => {})
   } catch {
     /* ignore */
   }
 }
 
 /**
- * Play a bgm track once (non-looping) as a short sting without breaking the
- * current looping soundtrack. The base loop is paused, the sting plays, then
- * the base loop resumes (unless the scene changed mid-sting). Used for
- * dramatic short cues such as bombs/rockets. Fails (and resumes base) silently.
+ * 播放 BGM（内部函数）
  */
-export function playBgmOnce(scene: BgmScene): void {
-  ensureContext()
-  if (stingEl) return // only one sting at a time
-
-  const track = scene.includes('.') ? `bgm/${scene}` : `bgm/huaijiu_${scene}${BGM_EXT}`
-  const baseEl = bgmEl
-  const baseScene = currentBgm
-  if (baseEl) baseEl.pause()
-
-  const el = new Audio(resolveUrl(track))
-  el.preload = 'auto'
-  el.loop = false
-  el.volume = 0.9
-
-  let done = false
-  const finish = () => {
-    if (done) return
-    done = true
-    stingEl = null
-    // Resume the base loop only if the base element is unchanged.
-    if (baseScene && bgmEl === baseEl) {
-      const baseTrack = baseScene.includes('.') ? `bgm/${baseScene}` : `bgm/huaijiu_${baseScene}${BGM_EXT}`
-      startBgm(baseTrack, baseScene)
-    }
-  }
-  el.addEventListener('ended', finish)
-  el.addEventListener('error', finish)
-  stingEl = el
-  el.play().catch(finish)
-}
-
-/**
- * Switch (or start) the looping background music. `null` stops music.
- * Same-scene calls are no-ops. Different scenes crossfade by replacing the element.
- * Attempts to start immediately (desktop Electron permits autoplay); if the
- * browser blocks it, the scene is remembered and retried on the first user
- * gesture via the gesture listener.
- */
-export function playBgm(scene: BgmScene | null): void {
+function playBgm(scene: BgmScene | null): void {
   if (!scene) {
-    if (bgmEl) { bgmEl.pause(); bgmEl = null }
-    currentBgm = null
-    storedBgm = null
+    // 停止 BGM（带淡出效果）
+    if (bgmEl) {
+      const fadeOut = () => {
+        if (bgmEl && bgmEl.volume > 0.05) {
+          bgmEl.volume -= 0.05
+          requestAnimationFrame(fadeOut)
+        } else if (bgmEl) {
+          bgmEl.pause()
+          bgmEl = null
+        }
+      }
+      fadeOut()
+    }
+    currentScene = null
     return
   }
 
-  const track = scene.includes('.') ? `bgm/${scene}` : `bgm/huaijiu_${scene}${BGM_EXT}`
-  if (scene === currentBgm) return
+  const url = getSceneUrl(scene)
+  if (!url) return
 
-  storedBgm = scene
-  // Create/resume the context immediately so Electron (autoplay-allowed) starts
-  // here and the web retry path on gesture can run as well.
-  ensureContext()
-  startBgm(track, scene)
-}
+  if (bgmEl) {
+    // 切换场景（带淡入淡出效果）
+    bgmEl.volume = 0
+    bgmEl.src = url
+    const fadeIn = () => {
+      if (bgmEl && bgmEl.volume < 0.8) {
+        bgmEl.volume += 0.05
+        requestAnimationFrame(fadeIn)
+      }
+    }
+    bgmEl.play().then(fadeIn).catch(() => {})
+    return
+  }
 
-function startBgm(track: string, scene: BgmScene): void {
-  // Replace current track in place (crossfade is implemented by swap).
-  if (bgmEl) { bgmEl.pause(); bgmEl = null }
-  currentBgm = null // mark as pending until play() resolves
-  const el = new Audio(resolveUrl(track))
+  // 创建新的音频元素
+  const el = new Audio(resolveUrl(url))
   el.preload = 'auto'
   el.loop = true
   el.volume = 0.8
-  el.play().then(() => {
-    currentBgm = scene
-  }).catch(() => { /* blocked before gesture, retried via unlock */ })
+  el.play().catch(() => {})
   bgmEl = el
 }
 
+/**
+ * 手势解锁处理
+ */
 function unlockAndStart(): void {
+  isUnlocked = true
   ensureContext()
-  if (storedBgm) {
-    const track = storedBgm.includes('.') ? `bgm/${storedBgm}` : `bgm/huaijiu_${storedBgm}${BGM_EXT}`
-    startBgm(track, storedBgm)
-    // Remove the one-shot gesture listener once we've started.
-    window.removeEventListener('pointerdown', unlockAndStart)
-    window.removeEventListener('keydown', unlockAndStart)
-    gestureHandler = null
+
+  // 如果有缓存的场景，立即播放
+  if (storedScene) {
+    currentScene = storedScene
+    playBgm(storedScene)
+    storedScene = null
   }
+
+  // 移除手势监听器
+  window.removeEventListener('pointerdown', unlockAndStart)
+  window.removeEventListener('keydown', unlockAndStart)
+  gestureHandler = null
 }
 
-// Attach a one-shot document gesture listener once to auto-unlock audio.
-// Browsers require a user gesture before audio can autoplay; by the time a
-// player reaches the game table they have certainly interacted, so this fires
-// on the first click and starts the requested BGM.
+/**
+ * 确保手势监听器已注册
+ */
 function ensureGestureListener(): void {
   if (gestureHandler) return
   gestureHandler = unlockAndStart
@@ -159,34 +217,26 @@ function ensureGestureListener(): void {
 }
 
 /**
- * React hook for the audio engine.
+ * React Hook for the audio engine.
  *
- * - `bgm`: the scene the calling view wants to hear; the engine loops it and
- *          swaps it automatically. `null` = silence.
- * - `playVoice(name)`: one-shot SFX, e.g. `playVoice('不出')`.
- * - `unlock()`: manually force-start audio (usually unnecessary given the
- *   automatic gesture listener, but useful for programmatic entry).
+ * - `playVoice(name)`: one-shot SFX, e.g. `playVoice('不出')`
+ * - `setBgmScene(scene)`: set looping BGM scene, only switches on change
+ * - `getCurrentScene()`: get current BGM scene
+ * - `unlock()`: manually force-start audio
  */
-export function useAudio(bgm: BgmScene | null) {
+export function useAudio() {
   const [unlocked, setUnlocked] = useState(false)
 
   useEffect(() => {
+    preloadBgmFiles()
     ensureGestureListener()
-    playBgm(bgm)
-  }, [bgm])
-
-  // Stop background music when the calling view unmounts (e.g. leaving the room).
-  useEffect(() => {
-    return () => {
-      playBgm(null)
-    }
   }, [])
 
   const unlock = useCallback(() => {
-    ensureContext()
+    isUnlocked = true
     setUnlocked(true)
     unlockAndStart()
   }, [])
 
-  return { playVoice, playBgm, unlock, unlocked }
+  return { playVoice, setBgmScene, getCurrentScene, unlock, unlocked }
 }

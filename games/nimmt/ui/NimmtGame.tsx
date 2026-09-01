@@ -14,8 +14,18 @@ export function NimmtGame({ state, onAction }: GameComponentProps) {
   const isEnded = s.phase === 'ended'
   const myPickup = s.pendingPickup && s.pendingPickup.playerIndex === s.myIndex
 
-  const bgmScene = isEnded ? (s.myWinner ? 'win' : 'lose') : 'normal'
-  const { playVoice } = useAudio(bgmScene)
+  const { playVoice, setBgmScene } = useAudio()
+
+  // BGM scene calculation
+  const bgmScene = useMemo(() => {
+    if (isEnded) return null  // Game over, stop BGM
+    return 'playing'
+  }, [isEnded])
+
+  // Set BGM scene
+  useEffect(() => {
+    setBgmScene(bgmScene)
+  }, [bgmScene, setBgmScene])
 
   // ── Voice on game end ──
   const prevRef = useRef<{ ended: boolean; myWinner: boolean }>({ ended: false, myWinner: false })

@@ -58,7 +58,10 @@ function RoomScreen({
   onStartGame: () => void
   onLeaveRoom: () => void
 }) {
-  useAudio('welcome')
+  const { setBgmScene } = useAudio()
+  useEffect(() => {
+    setBgmScene('lobby')
+  }, [setBgmScene])
   return (
     <div className="room-page">
       <h2>房间</h2>
@@ -132,7 +135,10 @@ function EndedScreen({
   const isWinner = roleWinner !== undefined
     ? roleWinner === myRole
     : winnerId === playerId
-  useAudio(!hasWinner ? 'normal' : (isWinner ? 'win' : 'lose'))
+  const { setBgmScene } = useAudio()
+  useEffect(() => {
+    setBgmScene(null)  // Game ended, stop BGM
+  }, [setBgmScene])
 
   const detail = roleWinner != null
     ? `${roleWinner === 'landlord' ? '地主' : '农民'}获胜牌局`
