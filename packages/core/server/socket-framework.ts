@@ -6,7 +6,7 @@ import { logger } from './logger'
 import { UserStore } from './user-store'
 import { ServerConfig } from './server-config'
 import type { RoomPlayer, RoomSummary } from '@huiming/core-shared'
-import { AuthErrors } from '@huiming/core-shared'
+import { AuthErrors, PROTOCOL_VERSION, isCompatible } from '@huiming/core-shared'
 
 // Rate limiting for game actions
 const ACTION_RATE_LIMIT_MS = 100 // Minimum 100ms between actions
@@ -43,7 +43,14 @@ export function setupSocketFramework(
         }
       }
 
-      // Step 2: Verify user token
+      // Step 2: Check client version compatibility
+      const clientVersion = auth?.clientVersion
+      if (clientVersion && !isCompatible(clientVersion, PROTOCOL_VERSION)) {
+        logger.warn(`Client version ${clientVersion} incompatible with server ${PROTOCOL_VERSION}`)
+        return next(new Error(`${AuthErrors.VERSION_INCOMPATIBLE}:${PROTOCOL_VERSION}`))
+      }
+
+      // Step 3: Verify user token
       const token = auth?.token
       if (token) {
         const result = userStore.verifyToken(token)
@@ -138,6 +145,7 @@ export function setupSocketFramework(
         playerId: effectivePlayerId,
         games: pluginLoader.listPlugins(),
         userProfile,
+        serverVersion: PROTOCOL_VERSION,
       })
 
       // Send room list

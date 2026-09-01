@@ -43,9 +43,14 @@ function pickVoice(type: HandType, mainRank: number): string {
   }
 }
 
+// Resolve a seat index to a player's nickname (fall back to generic label).
+function nameFor(s: LandlordClientState, playerNames: Record<string, string>, idx: number): string {
+  return playerNames?.[s.playerIds?.[idx]] ?? `玩家${idx + 1}`
+}
+
 // ─── Main component ────────────────────────────────────────────────────────
 
-export function LandlordGame({ state, playerId, onAction }: GameComponentProps) {
+export function LandlordGame({ state, playerId, onAction, playerNames = {} }: GameComponentProps) {
   const s = state as LandlordClientState
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [toast, setToast] = useState<string | null>(null)
@@ -82,8 +87,15 @@ export function LandlordGame({ state, playerId, onAction }: GameComponentProps) 
   }, [s.winner, endgame, s.currentPhase])
 
   useEffect(() => {
+    // 场景切换；对局结束（s.winner）时 bgmScene 为 null 即停止
     setBgmScene(bgmScene)
   }, [bgmScene, setBgmScene])
+
+  // 兜底：游戏视图被卸载（对局结束切到结果页、退出房间、下一局）时强制停止 BGM，
+  // 避免因竞态导致 bgmScene 尚未变为 null 而残留原先的音乐。
+  useEffect(() => {
+    return () => setBgmScene(null)
+  }, [setBgmScene])
 
   const prevRef = useRef<{
     winner: string | null
@@ -195,6 +207,7 @@ export function LandlordGame({ state, playerId, onAction }: GameComponentProps) 
           opponentIndices={opponentIndices}
           canPassNow={canPassNow}
           toast={toast}
+          playerNames={playerNames}
           onPlay={handlePlay}
           onPass={handlePass}
           onBid={handleBid}
@@ -217,6 +230,7 @@ export function LandlordGame({ state, playerId, onAction }: GameComponentProps) 
       toast={toast}
       setToast={setToast}
       doAction={doAction}
+      playerNames={playerNames}
       onPlay={handlePlay}
       onPass={handlePass}
       onBid={handleBid}
@@ -235,6 +249,7 @@ interface HUDProps {
   opponentIndices: number[]
   canPassNow: boolean
   toast: string | null
+  playerNames?: Record<string, string>
   onPlay: () => void
   onPass: () => void
   onBid: (score: number) => void
@@ -243,8 +258,9 @@ interface HUDProps {
 function LandlordHUD({
   s, selectedIds, isMyTurn, isBidding, isPlaying,
   opponentIndices, canPassNow, toast,
-  onPlay, onPass, onBid,
+  playerNames = {}, onPlay, onPass, onBid,
 }: HUDProps) {
+  const nameOf = (i: number) => nameFor(s, playerNames, i)
   const getRoleTag = (playerIdx: number) => {
     if (s.currentPhase === 'bidding') return null
     if (s.gameInfo.landlord === playerIdx) return '地主'
@@ -257,7 +273,7 @@ function LandlordHUD({
       <div className="landlord-hud-top">
         <div className="landlord-hud-opp">
           <span className={`turn-dot ${s.currentTurn === opponentIndices[0] ? 'active' : ''}`} />
-          <span className="landlord-opponent-name">对手1</span>
+          <span className="landlord-opponent-name">{nameOf(opponentIndices[0])}</span>
           {getRoleTag(opponentIndices[0]) && (
             <span className={`landlord-role-tag ${opponentIndices[0] === s.gameInfo.landlord ? 'landlord' : 'farmer'}`}>
               {getRoleTag(opponentIndices[0])}
@@ -272,7 +288,7 @@ function LandlordHUD({
 
         <div className="landlord-hud-opp">
           <span className={`turn-dot ${s.currentTurn === opponentIndices[1] ? 'active' : ''}`} />
-          <span className="landlord-opponent-name">对手2</span>
+          <span className="landlord-opponent-name">{nameOf(opponentIndices[1])}</span>
           {getRoleTag(opponentIndices[1]) && (
             <span className={`landlord-role-tag ${opponentIndices[1] === s.gameInfo.landlord ? 'landlord' : 'farmer'}`}>
               {getRoleTag(opponentIndices[1])}
@@ -315,7 +331,7 @@ function LandlordHUD({
           <div className="landlord-bidding">
             <div className="landlord-bidding-info">
               {s.biddingInfo.round === 2 ? '底牌已亮出（明叫）· ' : ''}
-              等待玩家{s.currentTurn + 1}叫分
+              等待{nameOf(s.currentTurn)}叫分
               {s.biddingInfo.highestBid > 0 ? `（最高 ${s.biddingInfo.highestBid}分）` : ''}
             </div>
           </div>
@@ -333,7 +349,7 @@ function LandlordHUD({
         )}
 
         {isPlaying && !isMyTurn && (
-          <div className="landlord-turn-hint waiting">等待对手出牌...</div>
+          <div className="landlord-turn-hint waiting">等待{nameOf(s.currentTurn)}出牌...</div>
         )}
       </div>
 
@@ -381,6 +397,7 @@ interface CSSProps {
   toast: string | null
   setToast: React.Dispatch<React.SetStateAction<string | null>>
   doAction: (event: string, payload: any) => void
+  playerNames?: Record<string, string>
   onPlay: () => void
   onPass: () => void
   onBid: (score: number) => void
@@ -391,8 +408,9 @@ function LandlordGameCSS({
   isMyTurn, isBidding, isPlaying,
   opponentIndices, canPassNow,
   toast, setToast, doAction,
-  onPlay, onPass, onBid,
+  playerNames = {}, onPlay, onPass, onBid,
 }: CSSProps) {
+  const nameOf = (i: number) => nameFor(s, playerNames, i)
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null)
   const [dragEnd, setDragEnd] = useState<{ x: number; y: number } | null>(null)
   const handRef = useRef<HTMLDivElement>(null)
@@ -485,7 +503,7 @@ function LandlordGameCSS({
         <div className="landlord-opponent">
           <div className="landlord-opponent-info">
             <span className={`turn-dot ${s.currentTurn === opponentIndices[0] ? 'active' : ''}`} />
-            <span className="landlord-opponent-name">对手1</span>
+            <span className="landlord-opponent-name">{nameOf(opponentIndices[0])}</span>
             {getRoleTag(opponentIndices[0]) && (
               <span className={`landlord-role-tag ${opponentIndices[0] === s.gameInfo.landlord ? 'landlord' : 'farmer'}`}>
                 {getRoleTag(opponentIndices[0])}
@@ -514,7 +532,7 @@ function LandlordGameCSS({
         <div className="landlord-opponent">
           <div className="landlord-opponent-info">
             <span className={`turn-dot ${s.currentTurn === opponentIndices[1] ? 'active' : ''}`} />
-            <span className="landlord-opponent-name">对手2</span>
+            <span className="landlord-opponent-name">{nameOf(opponentIndices[1])}</span>
             {getRoleTag(opponentIndices[1]) && (
               <span className={`landlord-role-tag ${opponentIndices[1] === s.gameInfo.landlord ? 'landlord' : 'farmer'}`}>
                 {getRoleTag(opponentIndices[1])}
@@ -573,7 +591,7 @@ function LandlordGameCSS({
           <div className="landlord-bidding">
             <div className="landlord-bidding-info">
               {s.biddingInfo.round === 2 ? '底牌已亮出（明叫）· ' : ''}
-              等待玩家{s.currentTurn + 1}叫分
+              等待{nameOf(s.currentTurn)}叫分
               {s.biddingInfo.highestBid > 0 ? `（最高 ${s.biddingInfo.highestBid}分）` : ''}
             </div>
           </div>
@@ -587,7 +605,7 @@ function LandlordGameCSS({
         )}
 
         {isPlaying && !isMyTurn && (
-          <div className="landlord-turn-hint waiting">等待对手出牌...</div>
+          <div className="landlord-turn-hint waiting">等待{nameOf(s.currentTurn)}出牌...</div>
         )}
       </div>
 

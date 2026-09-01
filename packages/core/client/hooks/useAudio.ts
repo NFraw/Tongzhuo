@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { gsap } from 'gsap'
 
 /**
  * 通用 BGM 场景 - 持续循环播放的背景音乐
@@ -139,22 +140,31 @@ export function playVoice(name: string): void {
 }
 
 /**
+ * 停止当前 BGM 的所有音量淡化动画
+ */
+function killBgmFades(): void {
+  if (bgmEl) gsap.killTweensOf(bgmEl)
+}
+
+/**
  * 播放 BGM（内部函数）
  */
 function playBgm(scene: BgmScene | null): void {
   if (!scene) {
     // 停止 BGM（带淡出效果）
+    killBgmFades()
     if (bgmEl) {
-      const fadeOut = () => {
-        if (bgmEl && bgmEl.volume > 0.05) {
-          bgmEl.volume -= 0.05
-          requestAnimationFrame(fadeOut)
-        } else if (bgmEl) {
-          bgmEl.pause()
-          bgmEl = null
-        }
-      }
-      fadeOut()
+      const el = bgmEl
+      gsap.to(el, {
+        volume: 0,
+        duration: 0.5,
+        ease: 'power1.out',
+        onComplete: () => {
+          el.pause()
+          // 只有仍是当前 BGM 时才清空引用
+          if (bgmEl === el) bgmEl = null
+        },
+      })
     }
     currentScene = null
     return
@@ -163,26 +173,28 @@ function playBgm(scene: BgmScene | null): void {
   const url = getSceneUrl(scene)
   if (!url) return
 
+  killBgmFades()
+
   if (bgmEl) {
-    // 切换场景（带淡入淡出效果）
-    bgmEl.volume = 0
-    bgmEl.src = url
-    const fadeIn = () => {
-      if (bgmEl && bgmEl.volume < 0.8) {
-        bgmEl.volume += 0.05
-        requestAnimationFrame(fadeIn)
-      }
-    }
-    bgmEl.play().then(fadeIn).catch(() => {})
+    // 切换场景（带淡入）
+    const el = bgmEl
+    el.src = url
+    el.volume = 0
+    el.play()
+      .then(() => gsap.to(el, { volume: 0.8, duration: 0.4, ease: 'power1.out' }))
+      .catch(() => {})
     return
   }
 
   // 创建新的音频元素
-  const el = new Audio(resolveUrl(url))
+  // getSceneUrl 已返回完整的 audio/bgm/... 路径，直接使用（不再 resolveUrl 二次加前缀）
+  const el = new Audio(url)
   el.preload = 'auto'
   el.loop = true
-  el.volume = 0.8
-  el.play().catch(() => {})
+  el.volume = 0
+  el.play()
+    .then(() => gsap.to(el, { volume: 0.8, duration: 0.4, ease: 'power1.out' }))
+    .catch(() => {})
   bgmEl = el
 }
 

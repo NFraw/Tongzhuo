@@ -8,7 +8,7 @@ import './styles.css'
 
 const ROW_LABELS = ['第一行', '第二行', '第三行', '第四行']
 
-export function NimmtGame({ state, onAction }: GameComponentProps) {
+export function NimmtGame({ state, onAction, playerNames = {} }: GameComponentProps) {
   const s = state as NimmtClientState
   const isSelecting = s.phase === 'selecting'
   const isEnded = s.phase === 'ended'
@@ -144,7 +144,9 @@ export function NimmtGame({ state, onAction }: GameComponentProps) {
     onAction('chooseRow', { row })
   }
 
-  const label = (i: number) => (i === s.myIndex ? '你' : `玩家${i + 1}`)
+  // Resolve a seat index to a player's nickname (fall back to generic label).
+  const nameOf = (i: number) => playerNames?.[s.players[i]?.id] ?? `玩家${i + 1}`
+  const label = (i: number) => (i === s.myIndex ? '你' : nameOf(i))
 
   return (
     <div className="nimmt-game">
@@ -185,7 +187,7 @@ export function NimmtGame({ state, onAction }: GameComponentProps) {
           {myPickup
             ? `你的牌 ${s.pendingPickup!.card.value} 低于所有行尾，点击一行捡走！`
             : s.pendingPickup
-              ? `玩家${s.pendingPickup.playerIndex + 1} 正在选行…`
+              ? `${nameOf(s.pendingPickup.playerIndex)} 正在选行…`
               : '牌桌'}
         </div>
         {s.board.map((cards, row) => (

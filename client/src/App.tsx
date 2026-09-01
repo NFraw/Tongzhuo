@@ -711,6 +711,7 @@ function AppInner() {
           state={gameState}
           playerId={playerId}
           onAction={handleAction}
+          playerNames={Object.fromEntries(room.players.map(p => [p.id, p.name]))}
         />
       </div>
     )

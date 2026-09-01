@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
+import { PROTOCOL_VERSION } from '@huiming/core-shared'
 
 const PLAYER_ID_KEY = 'huiming-player-id'
 const PLAYER_NAME_KEY = 'huiming-player-name'
@@ -83,6 +84,7 @@ export function useSocket() {
       setConnectedToken(token || null)
       if (token) auth.token = token
       if (options?.serverPassword) auth.serverPassword = options.serverPassword
+      auth.clientVersion = PROTOCOL_VERSION
 
       const socket = io(target, {
         transports: ['polling', 'websocket'],
@@ -130,6 +132,13 @@ export function useSocket() {
 
         if (message === 'AUTH_TOKEN_INVALID' || message === 'AUTH_TOKEN_EXPIRED') {
           setAuthError('登录已过期，请重新登录')
+          setConnected(false)
+          return
+        }
+
+        if (message.startsWith('VERSION_INCOMPATIBLE')) {
+          const serverVer = message.split(':')[1] || '未知'
+          setAuthError(`客户端版本不兼容（客户端 ${PROTOCOL_VERSION}，服务器需要 ${serverVer}）。请更新客户端。`)
           setConnected(false)
           return
         }

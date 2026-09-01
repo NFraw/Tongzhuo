@@ -38,6 +38,7 @@ function getClientState(state: LandlordState, playerId: string): LandlordClientS
 
   return {
     myPlayerIndex: myIdx,
+    playerIds: state.players.map(p => p.id),
     myHand: me.hand,
     otherHandCounts,
     bottomCards: showBottom ? state.bottomCards : [],

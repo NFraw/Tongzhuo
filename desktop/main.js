@@ -1,8 +1,11 @@
 const { app, BrowserWindow, shell, ipcMain } = require('electron')
 const path = require('path')
 
-// Disable hardware acceleration issues on some GPUs
-app.disableHardwareAcceleration()
+// Keep hardware acceleration ON: the card game renders via WebGL (PixiJS), and
+// software rasterization (SwiftShader, forced by disabling HW accel) caps the
+// frame rate and makes animations visibly janky. Modern Electron/Chromium has
+// far fewer GPU-driver bugs, and the client already falls back to CSS rendering
+// if WebGL is unavailable or loses its context.
 
 // The game server is commonly exposed over a self-managed NAT tunnel
 // (cpolar / SakuraFrp / ngrok) that serves TLS with a self-signed certificate.

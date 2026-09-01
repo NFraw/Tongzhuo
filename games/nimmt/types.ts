@@ -36,7 +36,7 @@ export interface NimmtClientState {
   myIndex: number
   myHand: Card[]
   myCommitted: Card | null
-  players: { score: number; handCount: number; committed: boolean }[]
+  players: { id: string; score: number; handCount: number; committed: boolean }[]
   board: Card[][]
   round: number
   phase: NimmtState['phase']

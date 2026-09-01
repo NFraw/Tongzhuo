@@ -6,12 +6,13 @@ import { HuimingBoard } from './HuimingBoard'
 import type { HuimingClientState } from '../types'
 import './styles.css'
 
-export function HuimingGame({ state, playerId, onAction }: GameComponentProps) {
+export function HuimingGame({ state, playerId, onAction, playerNames = {} }: GameComponentProps) {
   const s = state as HuimingClientState
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
   const [placingFaceUp, setPlacingFaceUp] = useState(true)
 
   const isMyTurn = s.currentTurn === s.myPlayerIndex
+  const opponentName = playerNames?.[s.opponentId] ?? '对手'
 
   const handleCellClick = (row: number, col: number) => {
     if (s.winner || !isMyTurn) return
@@ -46,7 +47,7 @@ export function HuimingGame({ state, playerId, onAction }: GameComponentProps) {
   return (
     <>
       <PlayerInfo
-        label="对手"
+        label={opponentName}
         handCount={s.opponentHandCount}
         isTurn={!isMyTurn}
       />
@@ -93,7 +94,7 @@ export function HuimingGame({ state, playerId, onAction }: GameComponentProps) {
 
       {s.winner && (
         <div className="huiming-game-over">
-          <h2>{s.winner === playerId ? '你赢了！' : '对手获胜'}</h2>
+          <h2>{s.winner === playerId ? '你赢了！' : `${opponentName} 获胜`}</h2>
         </div>
       )}
     </>

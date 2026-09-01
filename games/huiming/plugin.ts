@@ -30,6 +30,7 @@ function getClientState(state: HuimingState, playerId: string): HuimingClientSta
     round: state.round,
     winner: state.winner,
     hasTakenThisTurn: state.hasTakenThisTurn,
+    opponentId: opp.id,
   }
 }
 

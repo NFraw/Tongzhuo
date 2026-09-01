@@ -1,5 +1,6 @@
 import type { GameClientPlugin } from '@huiming/core-shared'
 import { LandlordGame } from './LandlordGame'
+import { createLandlordRenderer } from './renderer'
 
 export const landlordClientPlugin: GameClientPlugin = {
   id: 'landlord',
@@ -13,4 +14,5 @@ export const landlordClientPlugin: GameClientPlugin = {
     jokers: 2,
   },
   GameComponent: LandlordGame,
+  renderer: createLandlordRenderer,
 }

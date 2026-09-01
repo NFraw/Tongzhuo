@@ -26,6 +26,9 @@ export interface GameComponentProps {
   state: ClientState
   playerId: string
   onAction: (event: string, payload: any) => void
+  /** playerId → nickname lookup, used to render nicknames instead of generic
+   * "玩家N"/"对手" labels. Optional — components fall back to generic labels. */
+  playerNames?: Record<string, string>
 }
 
 export interface GamePlugin {
@@ -47,4 +50,27 @@ export interface GameServerPlugin extends GamePlugin {
 export interface GameClientPlugin extends GamePlugin {
   GameComponent: React.ComponentType<GameComponentProps>
   assets?: Record<string, string>
+  renderer?: GameRendererFactory  // optional canvas renderer
 }
+
+/** Context passed to a GameRendererFactory at creation time */
+export interface RendererFactoryContext {
+  onAction: (event: string, payload: any) => void
+  onSelectionChange?: (selectedIds: Set<string>) => void
+}
+
+/**
+ * Factory function that a client plugin can register to provide canvas rendering.
+ * Returns null if WebGL is unavailable or the renderer cannot be created.
+ * The `app` parameter is the PIXI.Application already created by GameCanvas.
+ * Uses `any` for app to avoid core-shared depending on pixi types.
+ */
+export type GameRendererFactory = (
+  container: HTMLElement,
+  ctx: RendererFactoryContext,
+  app?: any  // PIXI.Application — typed as any to avoid pixi dependency in shared
+) => Promise<{
+  sync: (state: any, selectedIds?: Set<string>) => void
+  onResize?: () => void
+  destroy: () => void
+} | null>

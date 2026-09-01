@@ -19,6 +19,7 @@ function getClientState(state: NimmtState, playerId: string): NimmtClientState {
     myHand: me.hand,
     myCommitted: state.committed[myIndex],
     players: state.players.map((p, i) => ({
+      id: p.id,
       score: p.score,
       handCount: p.hand.length,
       committed: state.committed[i] !== null,

@@ -39,4 +39,6 @@ export interface HuimingClientState {
   round: number
   winner: string | null
   hasTakenThisTurn: boolean
+  /** Opponent's playerId, used to render their nickname. */
+  opponentId: string
 }

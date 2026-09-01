@@ -58,6 +58,8 @@ export interface LandlordState {
 
 export interface LandlordClientState {
   myPlayerIndex: number
+  /** Per-seat player IDs (index → playerId), used to render nicknames. */
+  playerIds: string[]
   myHand: Card[]
   otherHandCounts: [number, number]
   bottomCards: Card[]

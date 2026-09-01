@@ -23,6 +23,7 @@ export interface SocketAuthPayload {
   username?: string
   password?: string
   serverPassword?: string
+  clientVersion?: string
 }
 
 /** Coin transaction record */
@@ -46,6 +47,7 @@ export const AuthErrors = {
   INVALID_PASSWORD: 'AUTH_INVALID_PASSWORD',
   PROFILE_INVALID_NAME: 'PROFILE_INVALID_NAME',
   COINS_INSUFFICIENT: 'COINS_INSUFFICIENT',
+  VERSION_INCOMPATIBLE: 'VERSION_INCOMPATIBLE',
 } as const
 
 /** Validation rules */
