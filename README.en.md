@@ -1,49 +1,67 @@
 **English** | [简体中文](README.md)
 
-# 晦明 (Huì Míng)
+# Happy Cards (Huanle Kapai)
 
-A two-player game based on **25 playing cards**. The rules are simple, but full of strategy.
+An online multiplayer card game platform supporting multiple card games, built with TypeScript + React + Node.js + Socket.IO. Available on web browsers and Electron desktop.
 
-> "Huì Míng" symbolizes the constant transition between face-up and face-down cards.
+## Games
 
-## Overview
+| Game | Players | Description |
+|------|---------|-------------|
+| **Huiming** | 2 | A strategic two-player game with 25 cards. Cards flip between face-up and face-down — collect 6 of the same suit to win. See [docs/huiming-rules-en.md](docs/huiming-rules-en.md) |
+| **Landlord (Dou Di Zhu)** | 3 | Classic Chinese card game with bidding, bombs, and spring mechanics. Features voice chat and animations. |
+| **Nimmt!** | 2-10 | Strategic card game — pick a card each round and place it in the right row, avoiding collecting bull heads. |
 
-- **Players**: 2
-- **Deck**: 6 cards of each suit — hearts, spades, diamonds, clubs — plus 1 Joker: **25 cards** in total
-- **Goal**: Be the first to collect **6 cards of any one suit**
+## Tech Stack
 
-## Setup
+- **Frontend**: React 19 + TypeScript + Vite + PixiJS 8 (Canvas rendering) + GSAP (animations)
+- **Backend**: Node.js + Socket.IO + better-sqlite3
+- **Desktop**: Electron 35
+- **Architecture**: npm workspaces monorepo with a plugin-based game system
 
-Lay the 25 cards face down in a **5×5 grid** on the table. The center card is always the Joker; the other 24 cards are shuffled completely at random.
+## Project Structure
 
-## Core Rules
+```
+huiming/
+├── packages/
+│   └── core/
+│       ├── shared/      # Shared types, card utilities, plugin interfaces
+│       ├── server/      # Server: room management, user system, Socket.IO
+│       └── client/      # Client: socket connection, UI hooks, canvas renderer framework
+├── games/
+│   ├── huiming/         # Huiming (engine + rules + plugin)
+│   ├── landlord/        # Landlord (engine + rules + plugin + renderer)
+│   └── nimmt/           # Nimmt! (engine + rules + plugin)
+├── client/              # Web client (React SPA)
+├── desktop/             # Electron desktop app
+├── server/              # Server entry point
+├── docs/                # Documentation
+└── cards/               # Card assets
+```
 
-1. **Taking a card**: On your turn, you may take one face-up card.
-2. **Taking face-down cards**: Whenever all cards on the table are face down, both players each gain the ability to take one face-down card directly. The ability is kept and stacks.
-3. **The Joker**: It can only be taken while face up, and it can count as any suit.
-4. **Flipping**: When a card is taken, flip its four neighbors (up, down, left, right) — face down becomes face up, and face up becomes face down. The empty space left behind is not flipped.
-5. **End of turn**: Taking a card immediately ends the current player's turn.
-6. **Placing a card**: Once per game per player, on your turn you may place one card from your hand into an empty space on the table, face up or face down as you choose. Note: **on a turn, you must place first, then take.**
-7. **Winning**: The first player to collect six cards of any one suit wins.
-8. **Stalemate → next round**: If only one card remains on the table and no one has collected six cards of a suit, the game moves to the next round — the player who went second in the previous round starts, and players take turns placing cards from their hands into empty spaces (face up or face down, as they choose). Once all cards are placed, rules 1–6 continue. If still no one has collected six of a suit, the player with the most cards of a single suit in hand wins.
+## Quick Start
 
-## Tips to Get You Started
+```bash
+# Install dependencies
+npm install
 
-- All cards start face down, so both players gain the ability to take a face-down card. The first player must use it immediately, while the second player can save it — this balances the advantage of going first.
-- The Joker is powerful, but it can only be taken face up, so the four cards adjacent to it matter just as much.
-- Except for cards taken face down, all card information is shared. Winning takes constant thinking and memory — and, when necessary, a little courage to gamble.
-- Make the most of your one-time card placement: use it to block your opponent, or to build a bridge to victory.
-- Once the second round begins, the game changes: both players know each other's hands, and choosing whether to collect your own suit or break your opponent's becomes the key decision.
+# Start server (default port 3000)
+npm run dev:server
 
-## Project Status
+# Start client (default port 5173)
+npm run dev:client
+```
 
-- [x] Rules
-- [ ] Companion game (in development, stay tuned)
+Open `http://localhost:5173` in your browser, enter a nickname, and join the lobby.
 
-## Assets
+## Documentation
 
-- `assets/`: card images (hearts, spades, diamonds, clubs, Joker)
+- [Architecture](docs/architecture.md) — System architecture and module responsibilities
+- [Design](docs/design.md) — Game design philosophy
+- [Learning Guide](docs/learning-guide.md) — TypeScript/React/Node.js/Socket.IO/PixiJS/GSAP/Electron primer
+- [Huiming Rules](docs/huiming-rules-en.md) — Huiming game rules
+- [Voice Catalog](docs/voice-catalog.md) — Landlord voice asset list
 
 ## License
 
-All rights reserved. The rules and assets belong to the author. For commercial use or reprints, please contact the author.
+All rights reserved. Game rules and assets belong to the author. For commercial use or reprints, please contact the author.
