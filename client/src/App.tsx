@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSocket } from '@huiming/core-client/hooks/useSocket'
 import { useGamePlugin, registerClientPluginLoader } from '@huiming/core-client/hooks/useGamePlugin'
 import { useAudio } from '@huiming/core-client/hooks'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { AuthScreen } from './components/AuthScreen'
+import { SettingsPage } from './components/SettingsPage'
 import type { ClientState, RoomSummary } from '@huiming/core-shared'
 
 // Register plugin loaders for lazy loading
@@ -24,7 +27,7 @@ function getStoredPlayerName(): string {
   return localStorage.getItem('huiming-player-name') || 'Player'
 }
 
-type AppPhase = 'connect' | 'lobby' | 'room' | 'playing' | 'paused' | 'ended'
+type AppPhase = 'connect' | 'auth' | 'lobby' | 'room' | 'playing' | 'paused' | 'ended' | 'settings'
 
 /** All room-related state, always updated as a single unit from server events. */
 interface RoomView {
@@ -122,6 +125,7 @@ function EndedScreen({
   onPlayAgain: () => void
   onLeaveRoom: () => void
 }) {
+  const [waiting, setWaiting] = useState(false)
   const myRole = (gameState as any)?.myRole
   const roleWinner = myRole !== undefined ? (gameState as any)?.winner : undefined
   const hasWinner = winnerId != null || roleWinner != null
@@ -134,14 +138,23 @@ function EndedScreen({
     ? `${roleWinner === 'landlord' ? '地主' : '农民'}获胜牌局`
     : null
 
+  const handlePlayAgain = () => {
+    setWaiting(true)
+    onPlayAgain()
+  }
+
   return (
     <div className="lobby">
       <h2>游戏结束</h2>
       <p>{!hasWinner ? '游戏结束' : (isWinner ? '你赢了！' : '你输了')}</p>
       {detail && <p className="lobby-subtitle">{detail}</p>}
       <div className="lobby-actions">
-        <button className="lobby-btn primary" onClick={onPlayAgain}>
-          再来一局
+        <button
+          className="lobby-btn primary"
+          onClick={handlePlayAgain}
+          disabled={waiting}
+        >
+          {waiting ? '等待其他玩家...' : '再来一局'}
         </button>
         <button className="lobby-btn" onClick={onLeaveRoom}>
           返回大厅
@@ -163,9 +176,43 @@ function PausedScreen({ onLeaveRoom }: { onLeaveRoom: () => void }) {
   )
 }
 
-export function App() {
-  const { emit, on, playerId, connected, serverUrl, connectError, connect, disconnect, serverHistory } = useSocket()
+/** Avatar SVG for lobby display */
+const AVATAR_COLORS = [
+  '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#1abc9c',
+  '#3498db', '#9b59b6', '#e84393', '#636e72', '#2d3436',
+]
+
+function LobbyAvatar({ id, size = 32 }: { id: number; size?: number }) {
+  const color = AVATAR_COLORS[id] || AVATAR_COLORS[0]
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
+      <circle cx="24" cy="24" r="24" fill={color} />
+      <circle cx="24" cy="18" r="8" fill="white" opacity="0.9" />
+      <ellipse cx="24" cy="38" rx="14" ry="10" fill="white" opacity="0.9" />
+    </svg>
+  )
+}
+
+/** Inner app component that uses auth context */
+function AppInner() {
+  const { emit, on, playerId, connected, serverUrl, connectError, authError, serverPasswordRequired, connectedToken, connect, disconnect, serverHistory } = useSocket()
+  const auth = useAuth()
   const [phase, setPhase] = useState<AppPhase>('connect')
+
+  // Sync socket's serverUrl into AuthContext so logout/updateProfile/refreshToken work
+  useEffect(() => {
+    auth.setServerUrl(serverUrl)
+  }, [serverUrl, auth.setServerUrl])
+
+  // Auto-login path: the socket connected with a saved token (server verified it
+  // and player:welcome brought back the profile), but the auth context only got
+  // the user via updateProfile — never the token, since auth.login was bypassed.
+  // Settings/profile APIs require auth.token, so sync it once connected.
+  useEffect(() => {
+    if (connected && connectedToken && auth.user && !auth.token) {
+      auth.setToken(connectedToken)
+    }
+  }, [connected, connectedToken, auth.user, auth.token, auth.setToken])
   const [room, setRoom] = useState<RoomView>(EMPTY_ROOM)
   const [games, setGames] = useState<string[]>([])
   const [rooms, setRooms] = useState<RoomSummary[]>([])
@@ -184,9 +231,16 @@ export function App() {
     if (!connected) return
 
     const cleanups = [
-      on('player:welcome', ({ playerId: pid, games: gameList }: { playerId: string; games: string[] }) => {
+      on('player:welcome', ({ playerId: pid, games: gameList, userProfile }: { playerId: string; games: string[]; userProfile?: any }) => {
         setGames(gameList)
-        setPhase('lobby')
+        if (userProfile) {
+          auth.updateProfile(userProfile)
+          // Only change phase if coming from connect/auth (not when already in lobby/room/settings)
+          setPhase(prev => prev === 'connect' || prev === 'auth' ? 'lobby' : prev)
+        } else {
+          // Not authenticated — must login/register before entering
+          setPhase('auth')
+        }
         // If there's a pending action from a NEED_HELLO retry, execute it now.
         const pending = pendingRetryRef.current
         if (pending) {
@@ -216,22 +270,18 @@ export function App() {
       }),
       on('room:updated', (data: { roomId: string; gameId: string; playerList: { id: string; name: string; connected: boolean; ready: boolean }[]; isHost: boolean }) => {
         setRoom({ roomId: data.roomId, gameId: data.gameId, isHost: data.isHost, players: data.playerList })
-        // On reconnect back to a waiting room, route back to the room page.
-        if (phase === 'connect' || phase === 'lobby') {
+        if (phase === 'connect' || phase === 'lobby' || phase === 'auth') {
           stateVersionRef.current = 0
           setGameState(null)
           setPhase('room')
         }
       }),
       on('room:againAccepted', () => {
-        // A new game is starting in the same room — reset version so the
-        // incoming game:stateUpdate (version=1) isn't rejected as "stale".
         stateVersionRef.current = 0
         setGameState(null)
         setWinnerId(null)
       }),
       on('game:stateUpdate', ({ state, version, gameId }: { state: ClientState; version?: number; gameId?: string }) => {
-        // Ignore older versions
         if (version !== undefined && version < stateVersionRef.current) {
           return
         }
@@ -239,8 +289,6 @@ export function App() {
         if (version !== undefined) {
           stateVersionRef.current = version
         }
-        // On a reconnect (or join-link) the client may not have set the gameId
-        // yet, so derive it from the update to load the right plugin.
         if (gameId) {
           setRoom(prev => ({ ...prev, gameId }))
         }
@@ -258,12 +306,9 @@ export function App() {
       }),
       on('room:error', ({ reason, code }: { reason: string; code?: string }) => {
         if (code === 'NEED_HELLO') {
-          // Socket mapping lost (e.g. tunnel reconnect). Re-handshake and
-          // queue the last action to retry after welcome arrives.
           const pending = pendingRetryRef.current
           if (pending) {
             emit('player:hello', { playerId: getStoredPlayerId(), name: getStoredPlayerName() })
-            // pending is kept; player:welcome handler will retry it.
           } else {
             setError('连接已重置，请重新操作')
             setTimeout(() => setError(null), 3000)
@@ -312,24 +357,26 @@ export function App() {
       }),
     ]
     return () => cleanups.forEach(fn => fn())
-  }, [on, phase, connected])
+  }, [on, phase, connected, auth])
 
-  // When the page is served over http(s) (production: hosted by the game
-  // server; dev: Vite proxies /socket.io to the dev server), auto-connect to
-  // that origin. When loaded via file:// (desktop client) the origin is not
-  // the game server, so stay on the connect screen and let the user type it.
-  // Only do this once on first boot — otherwise re-running when phase returns
-  // to 'connect' would instantly reconnect, making "断开连接" impossible.
+  // Auto-connect on first boot
   const didAutoConnectRef = useRef(false)
   useEffect(() => {
     const origin = window.location.origin
-    // 由 http(s) 页面托管（生产由游戏服务器托管，dev 走 Vite 代理）时自动连接；
-    // 桌面端 file:// 的 origin 不含 http，则停留连接界面由用户输入服务器地址。
     if (!didAutoConnectRef.current && phase === 'connect' && !connected && origin.startsWith('http')) {
       didAutoConnectRef.current = true
-      connect(origin)
+      // Check if we have saved credentials for this origin
+      const savedToken = auth.getSavedCredential(origin)?.token
+      connect(origin, savedToken ? { token: savedToken } : undefined)
     }
-  }, [phase, connected, connect])
+  }, [phase, connected, connect, auth])
+
+  // Handle auth errors — transition to auth phase
+  useEffect(() => {
+    if (authError && phase !== 'auth') {
+      setPhase('auth')
+    }
+  }, [authError, phase])
 
   // Auto-join if URL has roomId
   useEffect(() => {
@@ -343,11 +390,21 @@ export function App() {
     }
   }, [connected, phase, emit])
 
-  const handleConnect = useCallback((url: string) => {
+  const handleConnect = useCallback((url: string, serverPassword?: string) => {
     if (!url) return
-    // Protocol normalization + http/https fallback happens inside useSocket.connect.
-    connect(url)
-  }, [connect])
+    // Check for saved token
+    const savedToken = auth.getSavedCredential(url)?.token
+    connect(url, { token: savedToken || undefined, serverPassword })
+  }, [connect, auth])
+
+  const handleAuthSuccess = useCallback((token: string, username: string, user: any) => {
+    auth.login(token, username, user)
+    auth.saveCredential(serverUrl || '', username, token, user.displayName)
+    // Reconnect with token
+    if (serverUrl) {
+      connect(serverUrl, { token })
+    }
+  }, [auth, serverUrl, connect])
 
   const handleDisconnect = useCallback(() => {
     disconnect()
@@ -356,6 +413,15 @@ export function App() {
     setGameState(null)
     setWinnerId(null)
   }, [disconnect])
+
+  const handleLogout = useCallback(() => {
+    auth.logout()
+    disconnect()
+    setPhase('connect')
+    setRoom(EMPTY_ROOM)
+    setGameState(null)
+    setWinnerId(null)
+  }, [auth, disconnect])
 
   const handleCreateRoom = useCallback(() => {
     const payload = { gameId: selectedGameId }
@@ -409,6 +475,57 @@ export function App() {
     emit('room:start')
   }, [emit])
 
+  // Auth phase
+  if (phase === 'auth' && serverUrl) {
+    return (
+      <AuthScreen
+        serverUrl={serverUrl}
+        onAuthSuccess={handleAuthSuccess}
+        onBack={() => {
+          disconnect()
+          setPhase('connect')
+        }}
+      />
+    )
+  }
+
+  // Settings phase. Rendered unconditionally so it can never fall through to
+  // the playing-phase loading fallback; if the session was lost while the
+  // settings page was open (token cleared, disconnected, etc.) show a recovery
+  // screen instead.
+  if (phase === 'settings') {
+    if (auth.user && auth.token && serverUrl) {
+      return (
+        <SettingsPage
+          serverUrl={serverUrl}
+          token={auth.token}
+          user={auth.user}
+          onBack={() => setPhase('lobby')}
+          onProfileUpdate={auth.updateProfile}
+          onLogout={handleLogout}
+        />
+      )
+    }
+    console.warn('[settings] blocked — session lost', {
+      phase,
+      hasUser: !!auth.user,
+      hasToken: !!auth.token,
+      socketUrl: serverUrl,
+      authUrl: auth.serverUrl,
+    })
+    return (
+      <div className="lobby">
+        <h2>登录状态已失效</h2>
+        <p>会话已断开，请重新连接。</p>
+        <div className="lobby-actions">
+          <button className="lobby-btn primary" onClick={() => setPhase(serverUrl ? 'lobby' : 'connect')}>
+            返回
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   // Connect phase
   if (phase === 'connect') {
     return (
@@ -418,6 +535,7 @@ export function App() {
         <div className="connect-panel">
           <h2>连接服务器</h2>
           {connectError && <div className="error-message">连接失败: {connectError}</div>}
+          {authError && <div className="error-message">{authError}</div>}
           <div className="connect-input-row">
             <input
               type="text"
@@ -428,6 +546,21 @@ export function App() {
             />
             <button onClick={() => handleConnect(serverInput)}>连接</button>
           </div>
+          {serverPasswordRequired && (
+            <div className="connect-input-row">
+              <input
+                type="password"
+                placeholder="输入服务器密码"
+                id="server-password-input"
+              />
+              <button onClick={() => {
+                const pwInput = document.getElementById('server-password-input') as HTMLInputElement
+                handleConnect(serverInput, pwInput?.value)
+              }}>
+                连接
+              </button>
+            </div>
+          )}
           {serverHistory.length > 0 && (
             <div className="server-history">
               <p>历史记录:</p>
@@ -454,7 +587,22 @@ export function App() {
   if (phase === 'lobby') {
     return (
       <div className="lobby">
-        <h1>欢乐卡牌</h1>
+        <div className="lobby-header">
+          <h1>欢乐卡牌</h1>
+          {auth.user && (
+            <div className="lobby-user-bar">
+              <LobbyAvatar id={auth.user.avatarId} size={28} />
+              <span className="lobby-username">{auth.user.displayName}</span>
+              <span className="lobby-coins">🪙 {auth.user.coins}</span>
+              <button className="lobby-settings-btn" onClick={() => setPhase('settings')}>
+                设置
+              </button>
+              <button className="lobby-settings-btn" onClick={handleLogout}>
+                退出登录
+              </button>
+            </div>
+          )}
+        </div>
         <p className="lobby-subtitle">已连接: {serverUrl}</p>
         {error && <div className="error-message">{error}</div>}
         <div className="lobby-actions">
@@ -538,25 +686,39 @@ export function App() {
     )
   }
 
-  // Playing phase
-  if (!gameState || !gamePlugin) {
-    return <div className="lobby"><p>加载中...</p></div>
+  // Playing phase — the only phase that may show the loading fallback.
+  if (phase === 'playing') {
+    if (!gameState || !gamePlugin) {
+      return <div className="lobby"><p>加载中...</p></div>
+    }
+
+    const GameComponent = gamePlugin.GameComponent
+    return (
+      <div className="game-room" data-game={room.gameId}>
+        {error && <div className="error-message">{error}</div>}
+        <div className="game-room-top-bar">
+          <button className="game-leave-btn" onClick={handleLeaveRoom}>
+            退出房间
+          </button>
+        </div>
+        <GameComponent
+          state={gameState}
+          playerId={playerId}
+          onAction={handleAction}
+        />
+      </div>
+    )
   }
 
-  const GameComponent = gamePlugin.GameComponent
+  // Unknown phase — never fall through to the loading screen.
+  return null
+}
+
+/** Root component wraps with AuthProvider */
+export function App() {
   return (
-    <div className="game-room">
-      {error && <div className="error-message">{error}</div>}
-      <div className="game-room-top-bar">
-        <button className="game-leave-btn" onClick={handleLeaveRoom}>
-          退出房间
-        </button>
-      </div>
-      <GameComponent
-        state={gameState}
-        playerId={playerId}
-        onAction={handleAction}
-      />
-    </div>
+    <AuthProvider>
+      <AppInner />
+    </AuthProvider>
   )
 }

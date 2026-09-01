@@ -40,12 +40,16 @@ export interface LandlordState {
     passCount: number
     startBidder: number
     turnsTaken: number
+    bottomRevealed: boolean
+    round: number
+    landlordDecidedInRound: number
   }
   game: {
     landlord: number | null
     lastPlay: PlayedCards | null
     lastPlayer: number | null
     passCount: number
+    passEvent: number   // monotonic counter, increments on each pass, never resets
     multiplier: number
     baseScore: number
   }
@@ -64,12 +68,15 @@ export interface LandlordClientState {
     highestBidder: number
     myTurnToBid: boolean
     lastBid: number | null
+    bottomRevealed: boolean
+    round: number
   }
   gameInfo: {
     landlord: number | null
     lastPlay: PlayedCards | null
     lastPlayer: number | null
     passCount: number
+    passEvent: number
     multiplier: number
     baseScore: number
   }

@@ -1,17 +1,60 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { GameComponentProps, Card } from '@huiming/core-shared'
-import { useAudio, playBgmOnce } from '@huiming/core-client/hooks'
+import { useAudio } from '@huiming/core-client/hooks'
 import { CardImage } from './CardImage'
-import type { LandlordClientState } from '../types'
+import type { LandlordClientState, HandType } from '../types'
 import './styles.css'
+
+/** landlordRank → voice file index mapping */
+function rankToVoiceIdx(rank: number): number {
+  if (rank <= 13) return rank    // 3-K → 3-13
+  if (rank === 14) return 1      // A → 1
+  if (rank === 15) return 2      // 2 → 2
+  if (rank === 16) return 14     // 小王 → 14
+  if (rank === 17) return 15     // 大王 → 15
+  return 3
+}
+
+/** Pick a random variant from a list */
+function randPick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)]
+}
+
+/** Select voice file for a given hand type and main rank */
+function pickVoice(type: HandType, mainRank: number): string {
+  const v = rankToVoiceIdx(mainRank)
+  switch (type) {
+    case 'single':        return `dan${v}.ogg`
+    case 'pair':          return `dui${v}.ogg`
+    case 'triple':        return `tuple${v}.ogg`
+    case 'triple_one':    return 'sandaiyi.ogg'
+    case 'triple_two':    return 'sandaiyidui.ogg'
+    case 'straight':      return 'shunzi.ogg'
+    case 'double_straight': return 'liandui.ogg'
+    case 'plane':         return 'feiji.ogg'
+    case 'plane_single':  return 'feiji.ogg'
+    case 'plane_pair':    return 'feiji.ogg'
+    case 'four_two':      return 'sidaier.ogg'
+    case 'four_two_pair': return 'sidailiangdui.ogg'
+    case 'bomb':          return 'zhadan.ogg'
+    case 'rocket':        return 'wangzha.ogg'
+    default:              return 'dan3.ogg'
+  }
+}
 
 export function LandlordGame({ state, playerId, onAction }: GameComponentProps) {
   const s = state as LandlordClientState
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null)
   const [dragEnd, setDragEnd] = useState<{ x: number; y: number } | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
   const handRef = useRef<HTMLDivElement>(null)
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+
+  /** Wrapped onAction */
+  const doAction = useCallback((event: string, payload: any) => {
+    onAction(event, payload)
+  }, [onAction])
 
   const isMyTurn = s.currentTurn === s.myPlayerIndex
   const isBidding = s.currentPhase === 'bidding'
@@ -34,45 +77,48 @@ export function LandlordGame({ state, playerId, onAction }: GameComponentProps) 
   const { playVoice } = useAudio(bgmScene)
 
   // Track prior state to fire voice SFX on transitions.
+  // Use passEvent (monotonic counter) instead of passCount (resets after2 passes)
+  // to reliably detect each pass action.
   const prevRef = useRef<{
     winner: string | null
     role: string | null
-    lastPlayType: string | null
-    passCount: number
-  }>({ winner: null, role: null, lastPlayType: null, passCount: 0 })
+    lastPlay: typeof s.gameInfo.lastPlay
+    passEvent: number
+  }>({ winner: null, role: null, lastPlay: null, passEvent: 0 })
 
   useEffect(() => {
     const p = prevRef.current
-
-    // Become landlord -> 叫地主
-    if (p.role !== s.myRole && s.myRole === 'landlord') playVoice('叫地主')
+    const lp = s.gameInfo.lastPlay
+    const pe = s.gameInfo.passEvent
 
     // Winner announcement
     if (p.winner !== s.winner && s.winner) {
-      playVoice(s.winner === s.myRole ? '我赢了' : '我输了')
+      playVoice(s.winner === s.myRole ? 'yingle.mp3' : 'shule.mp3')
     }
 
-    // Bomb / rocket detection — voice cue + one-shot normal2 sting.
-    const type = s.gameInfo.lastPlay?.type ?? null
-    if (type !== p.lastPlayType && type === 'bomb') {
-      playVoice('炸弹')
-      playBgmOnce('normal2')
-    }
-    if (type !== p.lastPlayType && type === 'rocket') {
-      playVoice('王炸')
-      playBgmOnce('normal2')
+    // Deep comparison for lastPlay to avoid missing plays with reused references
+    const playChanged = lp && (
+      lp.type !== p.lastPlay?.type ||
+      lp.mainRank !== p.lastPlay?.mainRank ||
+      lp.cards.length !== p.lastPlay?.cards.length ||
+      lp.cards.some((c, i) => c.id !== p.lastPlay?.cards[i]?.id)
+    )
+
+    if (playChanged) {
+      playVoice(pickVoice(lp.type, lp.mainRank))
+      // Bomb/rocket: play explosion SFX instead of switching BGM
+      if (lp.type === 'bomb' || lp.type === 'rocket') {
+        playVoice('special_bomb.ogg')
+      }
     }
 
-    // A pass shows as passCount increasing (reset to 0 on a successful play).
-    if (s.gameInfo.passCount > p.passCount) playVoice('不出')
-
-    prevRef.current = {
-      winner: s.winner,
-      role: s.myRole,
-      lastPlayType: type,
-      passCount: s.gameInfo.passCount,
+    // Pass: use passEvent (monotonic) — increments on every pass, never resets
+    if (pe > p.passEvent) {
+      playVoice(randPick(['buyao1.ogg', 'buyao2.ogg', 'buyao3.ogg']))
     }
-  }, [s.winner, s.myRole, s.gameInfo.lastPlay, s.gameInfo.passCount, playVoice])
+
+    prevRef.current = { winner: s.winner, role: s.myRole, lastPlay: lp, passEvent: pe }
+  }, [s.winner, s.myRole, s.gameInfo.lastPlay, s.gameInfo.passEvent, playVoice])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -82,14 +128,14 @@ export function LandlordGame({ state, playerId, onAction }: GameComponentProps) 
       } else if (e.key === 'Enter' && isPlaying && isMyTurn) {
         const selectedCards = s.myHand.filter(c => selectedIds.has(c.id))
         if (selectedCards.length > 0) {
-          onAction('play', { cards: selectedCards })
+          doAction('play', { cards: selectedCards })
           setSelectedIds(new Set())
         }
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [selectedIds, isPlaying, isMyTurn, s.myHand, onAction])
+  }, [selectedIds, isPlaying, isMyTurn, s.myHand, doAction])
 
   const toggleCard = useCallback((card: Card) => {
     setSelectedIds(prev => {
@@ -102,20 +148,23 @@ export function LandlordGame({ state, playerId, onAction }: GameComponentProps) 
 
   const handlePlay = useCallback(() => {
     const selectedCards = s.myHand.filter(c => selectedIds.has(c.id))
-    if (selectedCards.length > 0) {
-      onAction('play', { cards: selectedCards })
-      setSelectedIds(new Set())
+    if (selectedCards.length === 0) {
+      setToast('请先选牌')
+      setTimeout(() => setToast(null), 2000)
+      return
     }
-  }, [s.myHand, selectedIds, onAction])
+    doAction('play', { cards: selectedCards })
+    setSelectedIds(new Set())
+  }, [s.myHand, selectedIds, doAction])
 
   const handlePass = useCallback(() => {
-    onAction('pass', {})
+    doAction('pass', {})
     setSelectedIds(new Set())
-  }, [onAction])
+  }, [doAction])
 
   const handleBid = useCallback((score: number) => {
-    onAction('bid', { score })
-  }, [onAction])
+    doAction('bid', { score })
+  }, [doAction])
 
   // Drag-select (box selection) handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -284,6 +333,10 @@ export function LandlordGame({ state, playerId, onAction }: GameComponentProps) 
         {isBidding && s.biddingInfo.myTurnToBid && (
           <div className="landlord-bidding">
             <div className="landlord-bidding-info">
+              {s.biddingInfo.round === 2
+                ? '底牌已亮出（明叫）'
+                : '盲叫阶段'}
+              {' · '}
               当前最高: {s.biddingInfo.highestBid > 0 ? `${s.biddingInfo.highestBid}分` : '无人叫分'}
             </div>
             <div className="landlord-bid-buttons">
@@ -305,8 +358,9 @@ export function LandlordGame({ state, playerId, onAction }: GameComponentProps) 
         {isBidding && !s.biddingInfo.myTurnToBid && (
           <div className="landlord-bidding">
             <div className="landlord-bidding-info">
-              等待叫分...
-              {s.biddingInfo.highestBid > 0 && ` (最高 ${s.biddingInfo.highestBid}分)`}
+              {s.biddingInfo.round === 2 ? '底牌已亮出（明叫）· ' : ''}
+              等待玩家{s.currentTurn + 1}叫分
+              {s.biddingInfo.highestBid > 0 ? `（最高 ${s.biddingInfo.highestBid}分）` : ''}
             </div>
           </div>
         )}
@@ -377,6 +431,11 @@ export function LandlordGame({ state, playerId, onAction }: GameComponentProps) 
             {s.gameInfo.multiplier > 1 && ` (${s.gameInfo.multiplier}倍)`}
           </p>
         </div>
+      )}
+
+      {/* Toast notification */}
+      {toast && (
+        <div className="landlord-toast">{toast}</div>
       )}
     </div>
   )

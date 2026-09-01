@@ -3,7 +3,10 @@ import type { Server, Socket } from 'socket.io'
 import { RoomManager } from './room-manager'
 import { PluginLoader } from './plugin-loader'
 import { logger } from './logger'
+import { UserStore } from './user-store'
+import { ServerConfig } from './server-config'
 import type { RoomPlayer, RoomSummary } from '@huiming/core-shared'
+import { AuthErrors } from '@huiming/core-shared'
 
 // Rate limiting for game actions
 const ACTION_RATE_LIMIT_MS = 100 // Minimum 100ms between actions
@@ -14,13 +17,51 @@ const DISCONNECT_TIMEOUT_MS = 45000 // 45 seconds timeout for reconnection
 export function setupSocketFramework(
   io: Server,
   roomManager: RoomManager,
-  pluginLoader: PluginLoader
+  pluginLoader: PluginLoader,
+  userStore?: UserStore,
+  serverConfig?: ServerConfig
 ): void {
   // Instance-scoped state: each setupSocketFramework call gets its own maps
   const actionTimestamps = new Map<string, number>()
   const disconnectTimers = new Map<string, NodeJS.Timeout>()
   const playAgainRequests = new Map<string, Set<string>>() // roomId -> Set of playerIds
   const roomVersions = new Map<string, number>() // roomId -> version
+
+  // --- Auth middleware (io.use) ---
+  if (userStore && serverConfig) {
+    io.use((socket, next) => {
+      const auth = socket.handshake.auth as any
+
+      // Step 1: Check server password if required
+      if (serverConfig.requirePassword()) {
+        const serverPassword = auth?.serverPassword
+        if (!serverPassword) {
+          return next(new Error(AuthErrors.SERVER_PASSWORD_REQUIRED))
+        }
+        if (!serverConfig.verifyServerPassword(serverPassword)) {
+          return next(new Error(AuthErrors.SERVER_PASSWORD_INCORRECT))
+        }
+      }
+
+      // Step 2: Verify user token
+      const token = auth?.token
+      if (token) {
+        const result = userStore.verifyToken(token)
+        if (!result.valid) {
+          return next(new Error(result.error || AuthErrors.TOKEN_INVALID))
+        }
+        // Attach username to socket data
+        socket.data.username = result.username
+      } else if (userStore.hasUsers()) {
+        // No token provided, but users exist — auth is required
+        // Allow connection but mark as unauthenticated
+        // (the player:hello handler will use a temporary identity)
+        socket.data.username = null
+      }
+
+      next()
+    })
+  }
 
   function checkRateLimit(playerId: string): boolean {
     const now = Date.now()
@@ -57,8 +98,12 @@ export function setupSocketFramework(
 
     // Player handshake
     socket.on('player:hello', ({ playerId, name }: { playerId: string; name: string }) => {
+      // If authenticated via token, use that username as the stable identity
+      const authenticatedUsername = socket.data.username as string | null | undefined
+      const effectivePlayerId = authenticatedUsername || playerId
+
       // Validate input
-      if (!playerId || typeof playerId !== 'string' || playerId.length > 64) {
+      if (!effectivePlayerId || typeof effectivePlayerId !== 'string' || effectivePlayerId.length > 64) {
         socket.emit('room:error', { reason: '无效的玩家ID' })
         return
       }
@@ -67,32 +112,39 @@ export function setupSocketFramework(
         return
       }
 
-      logger.info('player.hello', { playerId, socketId: socket.id, name })
+      logger.info('player.hello', { playerId: effectivePlayerId, socketId: socket.id, name, authenticated: !!authenticatedUsername })
 
       // Store player name
-      roomManager.setPlayerName(playerId, name)
+      roomManager.setPlayerName(effectivePlayerId, name)
 
       // Update socket mapping
-      roomManager.updateSocket(playerId, socket.id)
+      roomManager.updateSocket(effectivePlayerId, socket.id)
 
       // Clear disconnect timer if exists
-      const existingTimer = disconnectTimers.get(playerId)
+      const existingTimer = disconnectTimers.get(effectivePlayerId)
       if (existingTimer) {
         clearTimeout(existingTimer)
-        disconnectTimers.delete(playerId)
+        disconnectTimers.delete(effectivePlayerId)
+      }
+
+      // Get user profile data if authenticated
+      let userProfile = null
+      if (authenticatedUsername && userStore) {
+        userProfile = userStore.getUser(authenticatedUsername)
       }
 
       // Send welcome with game list
       socket.emit('player:welcome', {
-        playerId,
+        playerId: effectivePlayerId,
         games: pluginLoader.listPlugins(),
+        userProfile,
       })
 
       // Send room list
       socket.emit('rooms:list', roomManager.getRoomSummaries())
 
       // Check if player was in a room (reconnection)
-      const room = roomManager.findRoomByPlayer(playerId)
+      const room = roomManager.findRoomByPlayer(effectivePlayerId)
       if (room) {
         // Rejoin socket room
         socket.join(room.id)
@@ -101,9 +153,9 @@ export function setupSocketFramework(
         if (plugin && room.state) {
           // If game was paused, resume
           if (room.phase === 'paused') {
-            logger.info('room.phase_change', { roomId: room.id, playerId }, 'paused→playing (reconnect resume)')
+            logger.info('room.phase_change', { roomId: room.id, playerId: effectivePlayerId }, 'paused→playing (reconnect resume)')
             room.phase = 'playing'
-            const otherPlayers = room.players.filter(p => p.id !== playerId)
+            const otherPlayers = room.players.filter(p => p.id !== effectivePlayerId)
             for (const other of otherPlayers) {
               const otherSocketId = roomManager.getSocketId(other.id)
               if (otherSocketId) {
@@ -112,14 +164,12 @@ export function setupSocketFramework(
             }
           }
 
-          // Send current state. The reconnecting client may not have its
-          // gameId set yet (fresh session), so include it so the client can
-          // load the right plugin instead of stalling at "loading".
-          const clientState = plugin.getClientState(room.state, playerId)
+          // Send current state
+          const clientState = plugin.getClientState(room.state, effectivePlayerId)
           socket.emit('game:stateUpdate', { state: clientState, gameId: room.gameId })
         } else if (room.phase === 'waiting') {
-          // Waiting room: send room detail so the client returns to the room page.
-          const roomDetail = roomManager.getRoomDetailForPlayer(room.id, playerId)
+          // Waiting room: send room detail
+          const roomDetail = roomManager.getRoomDetailForPlayer(room.id, effectivePlayerId)
           socket.emit('room:updated', roomDetail)
         }
       }
@@ -149,7 +199,6 @@ export function setupSocketFramework(
 
       const playerId = roomManager.getPlayerId(socket.id)
       if (!playerId) {
-        // Attach socketId so the client can re-handshake and retry.
         socket.emit('room:error', { reason: '未完成握手', code: 'NEED_HELLO', socketId: socket.id })
         return
       }
@@ -172,18 +221,15 @@ export function setupSocketFramework(
       const room = roomManager.createRoom(player, gameId, maxPlayers || plugin.maxPlayers)
       logger.info('room.create', { roomId: room.id, playerId, gameId, phase: room.phase })
       socket.join(room.id)
-      // Send room detail with gameId, hostId, playerList
       const roomDetail = roomManager.getRoomDetailForPlayer(room.id, playerId)
       socket.emit('room:created', { roomId: room.id, ...roomDetail })
 
-      // Broadcast room list update
       broadcastRoomList(io, roomManager)
     })
 
     // Join room
     socket.on('room:join', ({ roomId }: { roomId: string }) => {
       logger.debug('room.join.request', { socketId: socket.id, roomId })
-      // Validate roomId
       if (!roomId || typeof roomId !== 'string') {
         socket.emit('room:error', { reason: '无效的房间ID' })
         return
@@ -191,19 +237,16 @@ export function setupSocketFramework(
 
       const playerId = roomManager.getPlayerId(socket.id)
       if (!playerId) {
-        // Attach socketId so the client can re-handshake and retry.
         socket.emit('room:error', { reason: '未完成握手', code: 'NEED_HELLO', socketId: socket.id })
         return
       }
 
-      // Check if player is already in a room
       const existingRoom = roomManager.findRoomByPlayer(playerId)
       if (existingRoom) {
         socket.emit('room:error', { reason: '你已在其他房间中' })
         return
       }
 
-      // Check if room exists and is joinable
       const targetRoom = roomManager.getRoom(roomId)
       if (!targetRoom) {
         socket.emit('room:notFound')
@@ -239,7 +282,6 @@ export function setupSocketFramework(
       logger.info('room.joined', { roomId, playerId, players: room.players.length, phase: room.phase })
       const plugin = pluginLoader.getPlugin(room.gameId)!
 
-      // Send room detail with gameId so joining player can load the correct plugin
       const roomDetail = roomManager.getRoomDetailForPlayer(room.id, playerId)
       socket.emit('room:joined', {
         players: room.players.map(p => ({ id: p.id, name: p.name, connected: p.connected })),
@@ -247,10 +289,7 @@ export function setupSocketFramework(
         ...roomDetail,
       })
 
-      // Broadcast room list update
       broadcastRoomList(io, roomManager)
-
-      // Broadcast room:updated to all players in room
       broadcastRoomUpdated(io, room.id, roomManager)
     })
 
@@ -262,19 +301,16 @@ export function setupSocketFramework(
       const room = roomManager.findRoomByPlayer(playerId)
       if (!room) return
 
-      // Only allow in waiting phase
       if (room.phase !== 'waiting') {
         socket.emit('room:error', { reason: '游戏已开始' })
         return
       }
 
-      // Toggle ready status
       const player = room.players.find(p => p.id === playerId)
       if (!player) return
       const newReady = !player.ready
       roomManager.setPlayerReady(playerId, newReady)
 
-      // Broadcast room:updated to all players in room
       broadcastRoomUpdated(io, room.id, roomManager)
     })
 
@@ -287,34 +323,28 @@ export function setupSocketFramework(
       const room = roomManager.findRoomByPlayer(playerId)
       if (!room) return
 
-      // Verify room is still live in the manager (guards against stale refs
-      // if a race between leave/create left a dangling object).
       if (!roomManager.getRoom(room.id)) {
         logger.warn('room.start.stale_ref', { roomId: room.id, playerId })
         socket.emit('room:error', { reason: '房间已失效，请重新创建' })
         return
       }
 
-      // Check if player is host
       if (room.hostId !== playerId) {
         socket.emit('room:error', { reason: '只有房主可以开始游戏' })
         return
       }
 
-      // Check if room is in waiting phase
       if (room.phase !== 'waiting') {
         logger.warn('room.start.blocked', { roomId: room.id, playerId }, `phase=${room.phase} players=${room.players.length}`)
         socket.emit('room:error', { reason: '游戏已开始' })
         return
       }
 
-      // Check if all players are ready
       if (!roomManager.isAllReady(room.id)) {
         socket.emit('room:error', { reason: '所有玩家需要准备就绪' })
         return
       }
 
-      // Get plugin and check minPlayers
       const plugin = pluginLoader.getPlugin(room.gameId)
       if (!plugin) {
         socket.emit('room:error', { reason: '游戏不存在' })
@@ -326,19 +356,15 @@ export function setupSocketFramework(
         return
       }
 
-      // Start the game
       logger.info('room.phase_change', { roomId: room.id, playerId }, 'waiting→playing (room:start)')
       room.phase = 'playing'
       room.state = plugin.createInitialState(room.players.map(p => p.id))
       broadcastState(io, room, plugin, roomManager)
-
-      // Broadcast room list update
       broadcastRoomList(io, roomManager)
     })
 
     // Game action forwarded to plugin
     socket.on('game:action', ({ event, payload }: { event: string; payload: any }) => {
-      // Validate input
       if (!event || typeof event !== 'string') {
         socket.emit('game:error', { reason: '无效的事件名' })
         return
@@ -347,7 +373,6 @@ export function setupSocketFramework(
       const playerId = roomManager.getPlayerId(socket.id)
       if (!playerId) return
 
-      // Rate limiting
       if (!checkRateLimit(playerId)) {
         socket.emit('game:error', { reason: '操作过于频繁' })
         return
@@ -392,10 +417,9 @@ export function setupSocketFramework(
         }
       }
 
-      // Broadcast state
       broadcastState(io, room, plugin, roomManager)
 
-      // Check game end (either from checkEndNow flag or always check)
+      // Check game end
       const shouldCheckEnd = result.checkEndNow !== false
       if (shouldCheckEnd) {
         const winnerId = plugin.checkGameEnd(room.state)
@@ -422,11 +446,9 @@ export function setupSocketFramework(
 
       logger.info('room.leave', { roomId: room.id, playerId, phase: room.phase, isHost: leavingIsHost, players: room.players.length })
 
-      // Remove the leaving player first.
       socket.leave(room.id)
       roomManager.removePlayer(playerId)
 
-      // No players left — delete the room.
       if (room.players.length === 0) {
         logger.info('room.deleted', { roomId: room.id }, 'empty after leave')
         playAgainRequests.delete(room.id)
@@ -434,9 +456,6 @@ export function setupSocketFramework(
         return
       }
 
-      // If the game already started/ended, or the host abandoned a waiting
-      // room, dissolve the room so nobody is stranded. Otherwise (non-host
-      // leaves a waiting room) keep it alive and transfer host if needed.
       if (leavingIsHost || wasPlaying) {
         logger.info('room.dissolve', { roomId: room.id, playerId, remainingPlayers: room.players.length })
         for (const p of room.players) {
@@ -448,7 +467,6 @@ export function setupSocketFramework(
         }
         playAgainRequests.delete(room.id)
       } else {
-        // Non-host left a waiting room — notify remaining players, keep room.
         for (const p of room.players) {
           const oppSocketId = roomManager.getSocketId(p.id)
           if (oppSocketId) {
@@ -469,13 +487,11 @@ export function setupSocketFramework(
       const room = roomManager.findRoomByPlayer(playerId)
       if (!room) return
 
-      // Only allow in ended state
       if (room.phase !== 'ended') {
         socket.emit('room:error', { reason: '游戏未结束' })
         return
       }
 
-      // Track request
       let requests = playAgainRequests.get(room.id)
       if (!requests) {
         requests = new Set()
@@ -483,13 +499,9 @@ export function setupSocketFramework(
       }
       requests.add(playerId)
 
-      // Check if all players agreed
       const allAgreed = room.players.every(p => requests.has(p.id))
       if (allAgreed) {
         playAgainRequests.delete(room.id)
-
-        // Notify all players, then restart the game in place (players already
-        // occupy the room, so the room:join start path will never fire again).
         io.to(room.id).emit('room:againAccepted')
 
         const plugin = pluginLoader.getPlugin(room.gameId)
@@ -504,7 +516,6 @@ export function setupSocketFramework(
           room.state = null
         }
 
-        // Broadcast room list update
         broadcastRoomList(io, roomManager)
       }
     })
@@ -514,7 +525,7 @@ export function setupSocketFramework(
       socket.emit('rooms:list', roomManager.getRoomSummaries())
     })
 
-    // Request room state update (for reconnection)
+    // Request room state update
     socket.on('room:update', () => {
       const playerId = roomManager.getPlayerId(socket.id)
       if (!playerId) return
@@ -535,7 +546,6 @@ export function setupSocketFramework(
       const room = roomManager.findRoomByPlayer(playerId)
       if (!room) return
 
-      // Mark player as disconnected
       roomManager.disconnectPlayer(playerId)
 
       const otherPlayers = room.players.filter(p => p.id !== playerId)
@@ -546,7 +556,6 @@ export function setupSocketFramework(
         }
       }
 
-      // If game is playing, pause it and start timeout
       if (room.phase === 'playing') {
         logger.info('room.phase_change', { roomId: room.id, playerId }, 'playing→paused (disconnect)')
         room.phase = 'paused'
@@ -557,12 +566,9 @@ export function setupSocketFramework(
           }
         }
 
-        // Start disconnect timeout
         const timer = setTimeout(() => {
-          // Check if player reconnected
           const currentRoom = roomManager.findRoomByPlayer(playerId)
           if (currentRoom && currentRoom.phase === 'paused') {
-            // Player didn't reconnect, remaining players win by forfeit
             currentRoom.phase = 'ended'
             for (const other of otherPlayers) {
               const otherSocketId = roomManager.getSocketId(other.id)
@@ -591,7 +597,6 @@ function broadcastRoomUpdated(io: Server, roomId: string, roomManager: RoomManag
   const room = roomManager.getRoom(roomId)
   if (!room) return
 
-  // Send room detail to each player
   for (const player of room.players) {
     const socketId = roomManager.getSocketId(player.id)
     if (socketId) {

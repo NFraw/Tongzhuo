@@ -3,11 +3,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 export type BgmScene = 'welcome' | 'normal' | 'normal2' | 'exciting' | 'win' | 'lose'
 
 /**
- * Sound files live under /audio/. BGM tracks are named `bgm/huaijiu_<scene>.mp3`,
- * voice SFX are `voice/<name>.mp3`. Audio is fetched lazily, so a missing file
+ * Sound files live under /audio/. BGM tracks are named `bgm/huaijiu_<scene>.<ext>`,
+ * voice SFX are `voice/<name>.<ext>`. Audio is fetched lazily, so a missing file
  * simply produces no sound (never an error).
+ *
+ * If a name already contains a dot (e.g. "爆炸.ogg"), it is used as-is;
+ * otherwise ".mp3" is appended for backward compatibility.
  */
 const BASE_AUDIO = 'audio'
+const BGM_EXT = '.mp3'
 
 // Module-level state so the soundtrack is a singleton across game views.
 let bgmEl: HTMLAudioElement | null = null
@@ -40,10 +44,14 @@ function resolveUrl(path: string): string {
 /**
  * Play a one-shot sound effect. Fails silently if the file is missing or audio
  * is blocked. Returns a promise so callers may ignore it.
+ *
+ * If `name` contains a dot (e.g. "不出.ogg"), the full filename is used;
+ * otherwise ".mp3" is appended.
  */
 export function playVoice(name: string): void {
+  const file = name.includes('.') ? name : `${name}.mp3`
   try {
-    const el = new Audio(resolveUrl(`voice/${name}.mp3`))
+    const el = new Audio(resolveUrl(`voice/${file}`))
     el.preload = 'auto'
     el.play().catch(() => { /* missing or autoplay-blocked, ignore */ })
   } catch {
@@ -61,7 +69,7 @@ export function playBgmOnce(scene: BgmScene): void {
   ensureContext()
   if (stingEl) return // only one sting at a time
 
-  const track = `bgm/huaijiu_${scene}.mp3`
+  const track = scene.includes('.') ? `bgm/${scene}` : `bgm/huaijiu_${scene}${BGM_EXT}`
   const baseEl = bgmEl
   const baseScene = currentBgm
   if (baseEl) baseEl.pause()
@@ -78,7 +86,8 @@ export function playBgmOnce(scene: BgmScene): void {
     stingEl = null
     // Resume the base loop only if the base element is unchanged.
     if (baseScene && bgmEl === baseEl) {
-      startBgm(`bgm/huaijiu_${baseScene}.mp3`, baseScene)
+      const baseTrack = baseScene.includes('.') ? `bgm/${baseScene}` : `bgm/huaijiu_${baseScene}${BGM_EXT}`
+      startBgm(baseTrack, baseScene)
     }
   }
   el.addEventListener('ended', finish)
@@ -102,7 +111,7 @@ export function playBgm(scene: BgmScene | null): void {
     return
   }
 
-  const track = `bgm/huaijiu_${scene}.mp3`
+  const track = scene.includes('.') ? `bgm/${scene}` : `bgm/huaijiu_${scene}${BGM_EXT}`
   if (scene === currentBgm) return
 
   storedBgm = scene
@@ -129,7 +138,7 @@ function startBgm(track: string, scene: BgmScene): void {
 function unlockAndStart(): void {
   ensureContext()
   if (storedBgm) {
-    const track = `bgm/huaijiu_${storedBgm}.mp3`
+    const track = storedBgm.includes('.') ? `bgm/${storedBgm}` : `bgm/huaijiu_${storedBgm}${BGM_EXT}`
     startBgm(track, storedBgm)
     // Remove the one-shot gesture listener once we've started.
     window.removeEventListener('pointerdown', unlockAndStart)

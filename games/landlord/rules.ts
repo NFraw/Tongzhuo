@@ -6,10 +6,8 @@ export function isValidBid(state: LandlordState, playerId: string, score: number
   if (state.currentPhase !== 'bidding') return false
   const playerIdx = state.players.findIndex(p => p.id === playerId)
   if (playerIdx === -1 || playerIdx !== state.bidding.currentBidder) return false
-  // score 0 = pass, 1-3 = bid
   if (score < 0 || score > 3) return false
-  if (score === 0) return true  // can always pass
-  // must be higher than current highest bid
+  if (score === 0) return true  // always allowed to pass
   return score > state.bidding.highestBid
 }
 
@@ -17,29 +15,30 @@ export function isValidPlay(state: LandlordState, playerId: string, cards: Card[
   if (state.currentPhase !== 'playing') return false
   const playerIdx = state.players.findIndex(p => p.id === playerId)
   if (playerIdx === -1 || playerIdx !== state.currentTurn) return false
-  if (cards.length === 0) return false
+  if (!Array.isArray(cards) || cards.length === 0) return false
 
-  // All cards must be in player's hand
+  // Use real card data from server hand to prevent client-side tampering
   const hand = state.players[playerIdx].hand
-  const handIds = new Set(hand.map(c => c.id))
-  for (const card of cards) {
-    if (!handIds.has(card.id)) return false
+  const handMap = new Map(hand.map(c => [c.id, c]))
+  const realCards: Card[] = []
+  for (const c of cards) {
+    const real = handMap.get(c.id)
+    if (!real) return false
+    realCards.push(real)
   }
 
   // Must form a valid hand type
-  const handType = getHandType(cards)
+  const handType = getHandType(realCards)
   if (!handType) return false
 
-  const played = { cards, type: handType.type, mainRank: handType.mainRank }
+  const played = { cards: realCards, type: handType.type, mainRank: handType.mainRank }
 
   // If there's a previous play to beat
-  const { lastPlay, lastPlayer, passCount } = state.game
+  const { lastPlay, lastPlayer } = state.game
   if (lastPlay && lastPlayer !== playerIdx) {
-    // Must beat the last play
     return canBeat(played, lastPlay)
   }
 
-  // Free play (no previous play, or last play was by self after everyone passed)
   return true
 }
 

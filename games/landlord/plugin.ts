@@ -22,11 +22,25 @@ function getClientState(state: LandlordState, playerId: string): LandlordClientS
   // Determine last bid for display
   const lastBid = state.bidding.highestBid > 0 ? state.bidding.highestBid : null
 
+  // Bottom card visibility:
+  // - Bidding round 1 (blind): nobody sees
+  // - Bidding round 2 (open): everyone sees
+  // - Playing, landlord decided in round 1 (暗地主): only landlord sees
+  // - Playing, landlord decided in round 2 (明地主): everyone sees
+  let showBottom = false
+  if (state.currentPhase === 'bidding') {
+    showBottom = state.bidding.round >= 2
+  } else if (state.currentPhase === 'playing') {
+    showBottom = state.bidding.landlordDecidedInRound >= 2 || me.role === 'landlord'
+  } else {
+    showBottom = true // ended
+  }
+
   return {
     myPlayerIndex: myIdx,
     myHand: me.hand,
     otherHandCounts,
-    bottomCards: state.currentPhase === 'bidding' ? [] : state.bottomCards,
+    bottomCards: showBottom ? state.bottomCards : [],
     currentPhase: state.currentPhase,
     currentTurn: state.currentTurn,
     biddingInfo: {
@@ -34,12 +48,15 @@ function getClientState(state: LandlordState, playerId: string): LandlordClientS
       highestBidder: state.bidding.highestBidder,
       myTurnToBid: state.currentPhase === 'bidding' && state.bidding.currentBidder === myIdx,
       lastBid,
+      bottomRevealed: state.bidding.bottomRevealed,
+      round: state.bidding.round,
     },
     gameInfo: {
       landlord: state.game.landlord,
       lastPlay: state.game.lastPlay,
       lastPlayer: state.game.lastPlayer,
       passCount: state.game.passCount,
+      passEvent: state.game.passEvent,
       multiplier: state.game.multiplier,
       baseScore: state.game.baseScore,
     },
@@ -85,12 +102,20 @@ export const landlordServerPlugin: GameServerPlugin = {
           }
         }
 
-        // All 3 players have had a turn
+        // Check if a full round is complete
         if (game.bidding.turnsTaken >= 3) {
           if (game.bidding.highestBidder >= 0) {
             assignLandlord(game, game.bidding.highestBidder)
+          } else if (game.bidding.round === 1) {
+            // Round 1 nobody bid → reveal bottom cards, start round 2
+            game.bidding.bottomRevealed = true
+            game.bidding.round = 2
+            game.bidding.turnsTaken = 0
+            game.bidding.passCount = 0
+            game.bidding.currentBidder = game.bidding.startBidder
+            game.currentTurn = game.bidding.startBidder
           } else {
-            // Nobody bid, re-deal
+            // Round 2 still nobody bid → re-deal
             const newGame = createLandlordGame(game.players.map(p => p.id))
             Object.assign(game, newGame)
           }
@@ -111,14 +136,16 @@ export const landlordServerPlugin: GameServerPlugin = {
         const { cards } = payload
         if (!isValidPlay(game, playerId, cards)) return { state, broadcast, error: '无效的出牌' }
 
-        // Remove cards from hand
+        // Use real cards from server hand (anti-cheat)
         const hand = game.players[playerIdx].hand
+        const handMap = new Map(hand.map(c => [c.id, c]))
         const playIds = new Set(cards.map((c: any) => c.id))
+        const realCards = hand.filter(c => playIds.has(c.id))
         game.players[playerIdx].hand = hand.filter(c => !playIds.has(c.id))
 
-        // Record play
-        const handType = getHandType(cards)!
-        game.game.lastPlay = { cards, type: handType.type, mainRank: handType.mainRank }
+        // Record play with real card data
+        const handType = getHandType(realCards)!
+        game.game.lastPlay = { cards: realCards, type: handType.type, mainRank: handType.mainRank }
         game.game.lastPlayer = playerIdx
         game.game.passCount = 0
 
@@ -146,6 +173,7 @@ export const landlordServerPlugin: GameServerPlugin = {
         if (!canPass(game, playerId)) return { state, broadcast, error: '当前必须出牌' }
 
         game.game.passCount++
+        game.game.passEvent++
         game.currentTurn = (game.currentTurn + 1) % 3
 
         // If 2 players passed consecutively, the last player gets free play
@@ -173,6 +201,7 @@ export const landlordServerPlugin: GameServerPlugin = {
 function assignLandlord(game: LandlordState, landlordIdx: number): void {
   game.game.landlord = landlordIdx
   game.game.baseScore = game.bidding.highestBid
+  game.bidding.landlordDecidedInRound = game.bidding.round
   game.players[landlordIdx].role = 'landlord'
   for (let i = 0; i < 3; i++) {
     if (i !== landlordIdx) game.players[i].role = 'farmer'

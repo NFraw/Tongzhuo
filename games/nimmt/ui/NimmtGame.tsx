@@ -1,5 +1,5 @@
-// games/nimmt/ui/NimmtGame.tsx
-import { useEffect, useMemo, useRef } from 'react'
+// games/nimmt/ui/NimmtGame.tsx — v1.3
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import type { GameComponentProps, Card } from '@huiming/core-shared'
 import { useAudio } from '@huiming/core-client/hooks'
 import { NimmtCard } from './NimmtCard'
@@ -17,6 +17,7 @@ export function NimmtGame({ state, onAction }: GameComponentProps) {
   const bgmScene = isEnded ? (s.myWinner ? 'win' : 'lose') : 'normal'
   const { playVoice } = useAudio(bgmScene)
 
+  // ── Voice on game end ──
   const prevRef = useRef<{ ended: boolean; myWinner: boolean }>({ ended: false, myWinner: false })
   useEffect(() => {
     const p = prevRef.current
@@ -28,6 +29,100 @@ export function NimmtGame({ state, onAction }: GameComponentProps) {
 
   const committedCount = useMemo(() => s.players.filter(p => p.committed).length, [s.players])
   const totalPlayers = s.players.length
+
+  // ── Sort hand cards by value (ascending, left to right) ──
+  const sortedHand = useMemo(
+    () => [...s.myHand].sort((a, b) => a.value - b.value),
+    [s.myHand]
+  )
+
+  // ── Animation state ──
+  const [animatedCards, setAnimatedCards] = useState<Set<string>>(new Set())
+  const [bullCollectCards, setBullCollectCards] = useState<Set<string>>(new Set())
+  const [glowRows, setGlowRows] = useState<Set<number>>(new Set())
+  const [bullParticles, setBullParticles] = useState<{ id: number; x: number; y: number }[]>([])
+  const prevBoardRef = useRef<Card[][]>(s.board.map(r => [...r]))
+  const particleIdRef = useRef(0)
+  const timersRef = useRef<number[]>([])
+
+  // Helper to track timeouts for cleanup
+  const trackedSetTimeout = useCallback((fn: () => void, ms: number) => {
+    const id = window.setTimeout(fn, ms)
+    timersRef.current.push(id)
+    return id
+  }, [])
+
+  // Spawn floating bull head emoji particles
+  const spawnBullParticles = useCallback((count: number) => {
+    const newParticles: { id: number; x: number; y: number }[] = []
+    for (let i = 0; i < Math.min(count * 2, 8); i++) {
+      newParticles.push({
+        id: particleIdRef.current++,
+        x: 30 + Math.random() * 60,
+        y: 30 + Math.random() * 40,
+      })
+    }
+    setBullParticles(prev => [...prev, ...newParticles])
+    trackedSetTimeout(() => {
+      setBullParticles(prev => prev.filter(p => !newParticles.find(np => np.id === p.id)))
+    }, 1300)
+  }, [trackedSetTimeout])
+
+  // Detect board changes during resolving and trigger animations
+  useEffect(() => {
+    if (s.phase !== 'resolving') {
+      prevBoardRef.current = s.board.map(r => [...r])
+      return
+    }
+
+    const prevBoard = prevBoardRef.current
+    const newPlaced = new Set<string>()
+    const newCollected = new Set<string>()
+    const affectedRows = new Set<number>()
+
+    for (let r = 0; r < s.board.length; r++) {
+      const prevIds = new Set(prevBoard[r].map(c => c.id))
+      const currIds = new Set(s.board[r].map(c => c.id))
+
+      for (const card of s.board[r]) {
+        if (!prevIds.has(card.id)) {
+          newPlaced.add(card.id)
+          affectedRows.add(r)
+        }
+      }
+
+      for (const card of prevBoard[r]) {
+        if (!currIds.has(card.id)) {
+          newCollected.add(card.id)
+        }
+      }
+    }
+
+    if (newPlaced.size > 0) {
+      setAnimatedCards(new Set(newPlaced))
+      setGlowRows(new Set(affectedRows))
+      trackedSetTimeout(() => {
+        setAnimatedCards(new Set())
+        setGlowRows(new Set())
+      }, 700)
+    }
+
+    if (newCollected.size > 0) {
+      setBullCollectCards(new Set(newCollected))
+      spawnBullParticles(newCollected.size)
+      trackedSetTimeout(() => setBullCollectCards(new Set()), 800)
+    }
+
+    prevBoardRef.current = s.board.map(r => [...r])
+  }, [s.board, s.phase, trackedSetTimeout, spawnBullParticles])
+
+  // Cleanup all pending timers on unmount
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach(id => clearTimeout(id))
+      timersRef.current = []
+    }
+  }, [])
 
   const handleHandClick = (card: Card) => {
     if (!isSelecting || isEnded) return
@@ -43,13 +138,14 @@ export function NimmtGame({ state, onAction }: GameComponentProps) {
 
   return (
     <div className="nimmt-game">
+      {/* ── Header ── */}
       <div className="nimmt-header">
         <span className="nimmt-round">第 {s.round} / 10 轮</span>
-        <span className="nimmt-hint">牛头越少越好</span>
+        <span className="nimmt-hint">牛头越少越好 · 收集最少牛头者获胜</span>
       </div>
 
-      {/* Opponents */}
-      <div className="nimmt-opponents">
+      {/* ── Left sidebar: opponents ── */}
+      <div className="nimmt-sidebar">
         {s.players.map((p, i) => {
           if (i === s.myIndex) return null
           const isPending = s.pendingPickup?.playerIndex === i
@@ -59,11 +155,13 @@ export function NimmtGame({ state, onAction }: GameComponentProps) {
                 {label(i)}
                 {isPending && <span className="nimmt-acting-tag">选行中</span>}
               </div>
-              <div className="nimmt-player-row">
-                <span>牛头: {p.score}</span>
-                <span>手牌: {p.handCount}</span>
+              <div className="nimmt-player-stats">
+                <span>🐂 牛头: <strong>{p.score}</strong></span>
+                <span>🃏 手牌: <strong>{p.handCount}</strong></span>
                 {isSelecting && (
-                  <span className="nimmt-committed">{p.committed ? '已选牌 ✓' : '选牌中…'}</span>
+                  <span className="nimmt-committed">
+                    {p.committed ? '✓ 已选牌' : '⏳ 选牌中…'}
+                  </span>
                 )}
               </div>
             </div>
@@ -71,20 +169,20 @@ export function NimmtGame({ state, onAction }: GameComponentProps) {
         })}
       </div>
 
-      {/* Table */}
+      {/* ── Center: table ── */}
       <div className={`nimmt-table ${myPickup ? 'pickup-open' : ''}`}>
         <div className="nimmt-table-title">
           {myPickup
             ? `你的牌 ${s.pendingPickup!.card.value} 低于所有行尾，点击一行捡走！`
             : s.pendingPickup
               ? `玩家${s.pendingPickup.playerIndex + 1} 正在选行…`
-              : '桌面'}
+              : '牌桌'}
         </div>
         {s.board.map((cards, row) => (
           <div key={row} className="nimmt-row">
             <div className="nimmt-row-label">{ROW_LABELS[row]}</div>
             <div
-              className={`nimmt-row-cards ${myPickup ? 'clickable' : ''}`}
+              className={`nimmt-row-cards ${myPickup ? 'clickable' : ''} ${glowRows.has(row) ? 'row-glow' : ''}`}
               onClick={() => handleRowClick(row)}
             >
               {cards.map((c, idx) => (
@@ -93,6 +191,8 @@ export function NimmtGame({ state, onAction }: GameComponentProps) {
                   card={c}
                   end={idx === cards.length - 1}
                   dimmed={cards.length < 2}
+                  entering={animatedCards.has(c.id)}
+                  collecting={bullCollectCards.has(c.id)}
                 />
               ))}
             </div>
@@ -100,26 +200,27 @@ export function NimmtGame({ state, onAction }: GameComponentProps) {
         ))}
       </div>
 
-      {/* Last round recap */}
+      {/* ── Last round recap ── */}
       {s.lastResolve && !isEnded && (
         <div className="nimmt-recap">
+          <div style={{ fontWeight: 700, color: '#8a90a0', marginBottom: 4 }}>上轮回顾</div>
           {s.lastResolve.map((step, i) => (
             <div key={i} className="nimmt-recap-line">
               {label(step.playerIndex)} 出 {step.card.value}
               {step.pickedUpRow !== null
-                ? ` → 捡走${ROW_LABELS[step.pickedUpRow]}（+${step.gainedHeads} 头），${step.card.value} 开新行`
+                ? ` → 捡走${ROW_LABELS[step.pickedUpRow]}（+${step.gainedHeads} 🐂），${step.card.value} 开新行`
                 : ` → 放入${ROW_LABELS[step.placedRow]}`}
             </div>
           ))}
         </div>
       )}
 
-      {/* My hand */}
+      {/* ── My hand — bottom area ── */}
       <div className="nimmt-my-area">
         <div className="nimmt-my-info">
-          <span>你</span>
-          <span>牛头: {s.players[s.myIndex]?.score ?? 0}</span>
-          <span>手牌: {s.myHand.length}</span>
+          <span>👤 你</span>
+          <span>🐂 牛头: <strong>{s.players[s.myIndex]?.score ?? 0}</strong></span>
+          <span>🃏 手牌: <strong>{s.myHand.length}</strong></span>
           {isSelecting && (
             <span className="nimmt-waiting">
               {s.myCommitted
@@ -130,9 +231,9 @@ export function NimmtGame({ state, onAction }: GameComponentProps) {
           )}
         </div>
         <div className="nimmt-my-hand">
-          {s.myHand.length === 0 && <span className="hand-empty">（本轮无剩余手牌）</span>}
+          {sortedHand.length === 0 && <span className="hand-empty">（本轮无剩余手牌）</span>}
           <div className="nimmt-hand-list">
-            {s.myHand.map(card => (
+            {sortedHand.map(card => (
               <NimmtCard
                 key={card.id}
                 card={card}
@@ -150,18 +251,31 @@ export function NimmtGame({ state, onAction }: GameComponentProps) {
         </div>
       </div>
 
-      {/* Game over */}
+      {/* ── Floating bull particles ── */}
+      {bullParticles.map(p => (
+        <div
+          key={p.id}
+          className="bull-particle"
+          style={{ left: `${p.x}%`, top: `${p.y}%` }}
+        >
+          🐂
+        </div>
+      ))}
+
+      {/* ── Game over ── */}
       {isEnded && (
         <div className="nimmt-game-over">
-          <h2>{s.myWinner ? '你赢了！' : '你输了'}</h2>
+          <h2>{s.myWinner ? '你赢了！🎉' : '你输了'}</h2>
           <ol className="nimmt-ranking">
-            <li>先按牛头数从少到多排列：</li>
+            <li style={{ color: '#6a7080', fontSize: 14, listStyle: 'none' }}>
+              按牛头数从少到多排列：
+            </li>
             {[...s.players]
               .map((p, i) => ({ p, i }))
               .sort((a, b) => a.p.score - b.p.score)
-              .map(({ p, i }) => (
+              .map(({ p, i }, rank) => (
                 <li key={i} className={i === s.winnerIndex ? 'winner' : ''}>
-                  {label(i)} — {p.score} 头{i === s.winnerIndex ? ' 🏆' : ''}
+                  {rank + 1}. {label(i)} — {p.score} 🐂{i === s.winnerIndex ? ' 🏆' : ''}
                 </li>
               ))}
           </ol>

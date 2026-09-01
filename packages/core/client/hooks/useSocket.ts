@@ -4,6 +4,7 @@ import { io, Socket } from 'socket.io-client'
 const PLAYER_ID_KEY = 'huiming-player-id'
 const PLAYER_NAME_KEY = 'huiming-player-name'
 const SERVER_HISTORY_KEY = 'huiming-server-history'
+const CREDS_KEY = 'huiming-creds'
 
 function getOrCreatePlayerId(): string {
   let playerId = localStorage.getItem(PLAYER_ID_KEY)
@@ -33,6 +34,15 @@ function saveServerHistory(url: string): void {
   localStorage.setItem(SERVER_HISTORY_KEY, JSON.stringify(filtered.slice(0, 10)))
 }
 
+function getSavedToken(serverUrl: string): string | null {
+  try {
+    const creds = JSON.parse(localStorage.getItem(CREDS_KEY) || '{}')
+    return creds[serverUrl]?.token || null
+  } catch {
+    return null
+  }
+}
+
 export function useSocket() {
   const socketRef = useRef<Socket | null>(null)
   const [socketId, setSocketId] = useState<string>('')
@@ -40,18 +50,22 @@ export function useSocket() {
   const [connected, setConnected] = useState(false)
   const [serverUrl, setServerUrl] = useState<string | null>(null)
   const [connectError, setConnectError] = useState<string | null>(null)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [serverPasswordRequired, setServerPasswordRequired] = useState(false)
+  const [connectedToken, setConnectedToken] = useState<string | null>(null)
 
-  const connect = useCallback((url: string) => {
+  const connect = useCallback((url: string, options?: { token?: string; serverPassword?: string }) => {
     // Disconnect existing socket
     if (socketRef.current) {
       socketRef.current.disconnect()
       socketRef.current = null
     }
     setConnectError(null)
+    setAuthError(null)
+    setServerPasswordRequired(false)
 
-    // When the user types a bare host (LAN IP or tunnel domain) without a
-    // protocol, try http:// first, then fall back to https://. NAT tunnels
-    // (cpolar/ngrok) are usually HTTPS-only, so prepending http:// alone fails.
+    // When the user types a bare host without a protocol, try http:// first,
+    // then fall back to https://.
     const hasProtocol = /^https?:\/\//.test(url)
     const candidates = hasProtocol ? [url] : [`http://${url}`, `https://${url}`]
 
@@ -62,10 +76,17 @@ export function useSocket() {
       }
 
       const target = candidates[index]
+
+      // Build auth payload
+      const auth: Record<string, string> = {}
+      const token = options?.token || getSavedToken(target)
+      setConnectedToken(token || null)
+      if (token) auth.token = token
+      if (options?.serverPassword) auth.serverPassword = options.serverPassword
+
       const socket = io(target, {
-        // Start with HTTP long-polling (works through almost any NAT tunnel /
-        // reverse proxy), then upgrade to WebSocket if the tunnel supports it.
         transports: ['polling', 'websocket'],
+        auth,
       })
       socketRef.current = socket
       setServerUrl(target)
@@ -74,6 +95,8 @@ export function useSocket() {
       socket.on('connect', () => {
         setSocketId(socket.id || '')
         setConnected(true)
+        setAuthError(null)
+        setServerPasswordRequired(false)
 
         // Send handshake
         const pid = getOrCreatePlayerId()
@@ -94,9 +117,26 @@ export function useSocket() {
           tryCandidate(index + 1)
           return
         }
+
+        const message = err.message || String(err)
+
+        // Auth-related errors
+        if (message === 'SERVER_PASSWORD_REQUIRED' || message === 'SERVER_PASSWORD_INCORRECT') {
+          setServerPasswordRequired(true)
+          setAuthError(message === 'SERVER_PASSWORD_REQUIRED' ? '需要输入服务器密码' : '服务器密码错误')
+          setConnected(false)
+          return
+        }
+
+        if (message === 'AUTH_TOKEN_INVALID' || message === 'AUTH_TOKEN_EXPIRED') {
+          setAuthError('登录已过期，请重新登录')
+          setConnected(false)
+          return
+        }
+
         console.error('Connection error:', err)
         setConnected(false)
-        setConnectError(err.message || String(err))
+        setConnectError(message || '连接失败')
       })
     }
 
@@ -111,6 +151,9 @@ export function useSocket() {
     setConnected(false)
     setSocketId('')
     setServerUrl(null)
+    setAuthError(null)
+    setServerPasswordRequired(false)
+    setConnectedToken(null)
   }, [])
 
   const emit = useCallback((event: string, payload?: any) => {
@@ -131,6 +174,9 @@ export function useSocket() {
     connected,
     serverUrl,
     connectError,
+    authError,
+    serverPasswordRequired,
+    connectedToken,
     connect,
     disconnect,
     serverHistory: getServerHistory(),
