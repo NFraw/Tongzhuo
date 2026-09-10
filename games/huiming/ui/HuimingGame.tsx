@@ -12,7 +12,6 @@ export function HuimingGame({ state, playerId, onAction, playerNames = {} }: Gam
   const [placingFaceUp, setPlacingFaceUp] = useState(true)
 
   const isMyTurn = s.currentTurn === s.myPlayerIndex
-  const opponentName = playerNames?.[s.opponentId] ?? '对手'
 
   const handleCellClick = (row: number, col: number) => {
     if (s.winner || !isMyTurn) return
@@ -46,11 +45,16 @@ export function HuimingGame({ state, playerId, onAction, playerNames = {} }: Gam
 
   return (
     <>
-      <PlayerInfo
-        label={opponentName}
-        handCount={s.opponentHandCount}
-        isTurn={!isMyTurn}
-      />
+      <div className="huiming-opponents">
+        {s.opponents.map(o => (
+          <PlayerInfo
+            key={o.id}
+            label={playerNames?.[o.id] ?? '对手'}
+            handCount={o.handCount}
+            isTurn={s.currentTurn === o.index}
+          />
+        ))}
+      </div>
 
       <HuimingBoard
         state={s}
@@ -94,7 +98,7 @@ export function HuimingGame({ state, playerId, onAction, playerNames = {} }: Gam
 
       {s.winner && (
         <div className="huiming-game-over">
-          <h2>{s.winner === playerId ? '你赢了！' : `${opponentName} 获胜`}</h2>
+          <h2>{s.winner === playerId ? '你赢了！' : `${playerNames?.[s.winner] ?? '对手'} 获胜`}</h2>
         </div>
       )}
     </>

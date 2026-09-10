@@ -64,3 +64,11 @@
   0%, 100% { opacity: 0.7; }
   50% { opacity: 1; }
 }
+
+.huiming-opponents {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px;
+}
