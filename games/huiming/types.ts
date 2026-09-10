@@ -5,7 +5,7 @@
  * 类比 Java：相当于一个 types/interfaces 文件，定义了游戏中用到的所有"数据类"。
  *
  * 晦明游戏概述：
- *   - 2 人对战，25 张牌（4 花色×6 点数 + 1 张 Joker）排成 5×5 棋盘
+ *   - 2~4 人对战，25 张牌（4 花色×6 点数 + 1 张 Joker）排成 5×5 棋盘
  *   - 玩家轮流：取牌（明取/暗取）→ 翻开相邻牌 → 可选放牌回棋盘
  *   - 胜利条件：集齐同一花色 6 张（含 Joker 万能牌）
  *
@@ -55,8 +55,8 @@ export interface HuimingPlayer {
  * 晦明完整游戏状态（服务器端）。
  *
  * board:           5×5 棋盘
- * players:         两个玩家的状态，[0] 和 [1]
- * currentTurn:     当前轮到哪个玩家（0 或 1）
+ * players:         所有玩家的状态，下标即座位号
+ * currentTurn:     当前轮到哪个玩家（players 的下标）
  * phase:           'taking'=取牌阶段, 'placing'=续放阶段, 'ended'=游戏结束
  * round:           当前轮次（续放后递增）
  * winner:          获胜者 playerId，null 表示未结束
@@ -64,8 +64,8 @@ export interface HuimingPlayer {
  */
 export interface HuimingState {
   board: HuimingBoard
-  players: [HuimingPlayer, HuimingPlayer]
-  currentTurn: 0 | 1
+  players: HuimingPlayer[]
+  currentTurn: number
   phase: 'placing' | 'taking' | 'ended'
   round: number
   winner: string | null
@@ -87,16 +87,16 @@ export interface HuimingClientState {
   board: { card: Card | null; faceUp: boolean; exists: boolean }[][]
   /** 我的手牌 */
   myHand: Card[]
-  /** 对手手牌数量（不暴露具体牌面） */
-  opponentHandCount: number
   /** 我的剩余暗取次数 */
   myDarkPickCharges: number
   /** 我本回合是否还能放牌 */
   myCanPlace: boolean
-  /** 我是玩家 0 还是玩家 1 */
-  myPlayerIndex: 0 | 1
+  /** 我在 players 里的下标 */
+  myPlayerIndex: number
+  /** 所有对手（按座位序，不含自己）。只暴露手牌数量，不暴露牌面。 */
+  opponents: { index: number; id: string; handCount: number }[]
   /** 当前轮到谁 */
-  currentTurn: 0 | 1
+  currentTurn: number
   /** 当前阶段 */
   phase: string
   /** 当前轮次 */
@@ -105,6 +105,4 @@ export interface HuimingClientState {
   winner: string | null
   /** 本回合是否已取牌 */
   hasTakenThisTurn: boolean
-  /** 对手的 playerId，用于显示昵称 */
-  opponentId: string
 }

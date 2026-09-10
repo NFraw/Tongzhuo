@@ -72,24 +72,20 @@ export function createHuimingBoard(): HuimingBoard {
 /**
  * 初始化晦明游戏。
  *
- * @param p1 - 玩家 1 的 playerId
- * @param p2 - 玩家 2 的 playerId
+ * @param players - 所有玩家的 playerId（2~4 人）
  * @returns 完整的初始 HuimingState
  *
  * 初始状态：
  *   - 棋盘 25 张牌全部背面朝上
  *   - 每人 0 张手牌、1 次暗取机会
- *   - 玩家 0 先手，取牌阶段
+ *   - 玩家下标 0 先手，取牌阶段
  *
  * 调用处：plugin.ts → createInitialState()
  */
-export function initHuimingGame(p1: string, p2: string): HuimingState {
+export function initHuimingGame(players: string[]): HuimingState {
   return {
     board: createHuimingBoard(),
-    players: [
-      { id: p1, hand: [], darkPickCharges: 1, canPlace: true },
-      { id: p2, hand: [], darkPickCharges: 1, canPlace: true },
-    ],
+    players: players.map(id => ({ id, hand: [], darkPickCharges: 1, canPlace: true })),
     currentTurn: 0,
     phase: 'taking',
     round: 1,
@@ -102,7 +98,7 @@ export function initHuimingGame(p1: string, p2: string): HuimingState {
  * 从棋盘取牌。
  *
  * @param game      - 游戏状态（会被修改）
- * @param playerIdx - 取牌的玩家索引（0 或 1）
+ * @param playerIdx - 取牌的玩家索引（players 的下标）
  * @param row       - 棋盘行号（0~4）
  * @param col       - 棋盘列号（0~4）
  * @returns { success, reason? } - 是否成功
@@ -177,14 +173,13 @@ export function checkAllFaceDown(board: HuimingBoard): boolean {
 }
 
 /**
- * 双方各增加 1 次暗取机会。
- * 由 checkAllFaceDown() 触发。
+ * 所有玩家各增加 1 次暗取机会。
+ * 由 checkAllFaceDown() 触发（规则 2：全暗时所有玩家各获得一次）。
  *
  * 调用处：plugin.ts → handleEvent('take') 和 handleEvent('darkPick')
  */
 export function grantDarkPickCharges(game: HuimingState): void {
-  game.players[0].darkPickCharges++
-  game.players[1].darkPickCharges++
+  for (const player of game.players) player.darkPickCharges++
 }
 
 /**
