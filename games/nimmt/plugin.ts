@@ -14,7 +14,7 @@
  *   room:start 调用 createInitialState，broadcastState 调用 getClientState，
  *   game:action 后调用 checkGameEnd。
  */
-import type { GameServerPlugin, GameState, EventResult } from '@huiming/core-shared'
+import type { GameServerPlugin } from '@huiming/core-shared'
 import { buildDeck, createNimmtGame, selectCard, chooseRow } from './engine'
 import type { NimmtState, NimmtClientState } from './types'
 
@@ -67,7 +67,7 @@ function getClientState(state: NimmtState, playerId: string): NimmtClientState {
  *
  * 注册方式：server/src/index.ts 中调用 pluginLoader.register(nimmtServerPlugin)
  */
-export const nimmtServerPlugin: GameServerPlugin = {
+export const nimmtServerPlugin: GameServerPlugin<NimmtState, NimmtClientState> = {
   id: 'nimmt',
   name: '牛头人',
   description: '经典吃牛头卡牌游戏，牛头最少者获胜',
@@ -75,7 +75,7 @@ export const nimmtServerPlugin: GameServerPlugin = {
   maxPlayers: 6,
   deckConfig: NIMMT_DECK_CONFIG,
 
-  createInitialState(players: string[]): GameState {
+  createInitialState(players: string[]): NimmtState {
     return createNimmtGame(players)
   },
 
@@ -93,8 +93,8 @@ export const nimmtServerPlugin: GameServerPlugin = {
    *     牌值 < 所有行末尾 → 等待该玩家 chooseRow
    *     所有牌结算完 → 下一轮 selecting 或 ended
    */
-  handleEvent(state: GameState, playerId: string, event: string, payload: any): EventResult {
-    const game = state as NimmtState
+  handleEvent(game: NimmtState, playerId: string, event: string, payload: unknown) {
+    const state = game
     const playerIdx = game.players.findIndex(p => p.id === playerId)
     if (playerIdx === -1) return { state, broadcast: [], error: '玩家不在游戏中' }
 
@@ -102,7 +102,7 @@ export const nimmtServerPlugin: GameServerPlugin = {
 
     switch (event) {
       case 'select': {
-        const { cardId } = payload
+        const cardId = readField(payload, 'cardId')
         if (!cardId || typeof cardId !== 'string') {
           return { state, broadcast, error: '缺少卡牌ID' }
         }
@@ -112,7 +112,7 @@ export const nimmtServerPlugin: GameServerPlugin = {
         break
       }
       case 'chooseRow': {
-        const { row } = payload
+        const row = readField(payload, 'row')
         if (typeof row !== 'number') {
           return { state, broadcast, error: '缺少行号' }
         }
@@ -129,7 +129,13 @@ export const nimmtServerPlugin: GameServerPlugin = {
   },
 
   getClientState,
-  checkGameEnd(state: GameState): string | null {
-    return (state as NimmtState).winner
+  checkGameEnd(state: NimmtState): string | null {
+    return state.winner
   },
+}
+
+function readField(payload: unknown, key: string): unknown {
+  return payload && typeof payload === 'object'
+    ? (payload as Record<string, unknown>)[key]
+    : undefined
 }

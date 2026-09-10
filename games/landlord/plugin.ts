@@ -14,7 +14,7 @@
  *   room:start 调用 createInitialState，broadcastState 调用 getClientState，
  *   game:action 后调用 checkGameEnd。
  */
-import type { GameServerPlugin, GameState, EventResult } from '@huiming/core-shared'
+import type { Card, GameServerPlugin } from '@huiming/core-shared'
 import { createLandlordGame } from './engine'
 import { isValidBid, isValidPlay, canPass } from './rules'
 import { getHandType } from './hand'
@@ -93,7 +93,7 @@ function getClientState(state: LandlordState, playerId: string): LandlordClientS
  *
  * 注册方式：server/src/index.ts 中调用 pluginLoader.register(landlordServerPlugin)
  */
-export const landlordServerPlugin: GameServerPlugin = {
+export const landlordServerPlugin: GameServerPlugin<LandlordState, LandlordClientState> = {
   id: 'landlord',
   name: '欢乐斗地主',
   description: '经典三人扑克牌游戏',
@@ -101,7 +101,7 @@ export const landlordServerPlugin: GameServerPlugin = {
   maxPlayers: 3,
   deckConfig: LANDLORD_DECK_CONFIG,
 
-  createInitialState(players: string[]): GameState {
+  createInitialState(players: string[]): LandlordState {
     return createLandlordGame(players)
   },
 
@@ -121,14 +121,14 @@ export const landlordServerPlugin: GameServerPlugin = {
    *     出牌 → 手牌为空 → ended 阶段
    *     2 人 pass → 清空 lastPlay，自由出牌
    */
-  handleEvent(state: GameState, playerId: string, event: string, payload: any): EventResult {
-    const game = state as LandlordState
+  handleEvent(game: LandlordState, playerId: string, event: string, payload: unknown) {
+    const state = game
     const broadcast: { event: string; data: any }[] = []
 
     switch (event) {
       case 'bid': {
         if (game.currentPhase !== 'bidding') return { state, broadcast, error: '当前不是叫分阶段' }
-        const { score } = payload
+        const score = readNumber(payload, 'score')
         if (!isValidBid(game, playerId, score)) return { state, broadcast, error: '无效的叫分' }
 
         const bidderIdx = game.bidding.currentBidder
@@ -179,12 +179,12 @@ export const landlordServerPlugin: GameServerPlugin = {
         const playerIdx = game.players.findIndex(p => p.id === playerId)
         if (playerIdx === -1 || playerIdx !== game.currentTurn) return { state, broadcast, error: '不是你的回合' }
 
-        const { cards } = payload
+        const cards = readCards(payload)
         if (!isValidPlay(game, playerId, cards)) return { state, broadcast, error: '无效的出牌' }
 
         // 【安全关键】用服务器端真实牌数据替换客户端数据
         const hand = game.players[playerIdx].hand
-        const playIds = new Set(cards.map((c: any) => c.id))
+        const playIds = new Set(cards.map(c => c.id))
         const realCards = hand.filter(c => playIds.has(c.id))
         game.players[playerIdx].hand = hand.filter(c => !playIds.has(c.id))
 
@@ -234,9 +234,24 @@ export const landlordServerPlugin: GameServerPlugin = {
   },
 
   getClientState,
-  checkGameEnd(state: GameState): string | null {
-    return (state as LandlordState).winner
+  checkGameEnd(state: LandlordState): string | null {
+    return state.winner
   },
+}
+
+function readNumber(payload: unknown, key: string): number {
+  if (!payload || typeof payload !== 'object') return Number.NaN
+  const value = (payload as Record<string, unknown>)[key]
+  return typeof value === 'number' ? value : Number.NaN
+}
+
+function readCards(payload: unknown): Card[] {
+  if (!payload || typeof payload !== 'object') return []
+  const cards = (payload as Record<string, unknown>).cards
+  if (!Array.isArray(cards)) return []
+  return cards.filter((card): card is Card => {
+    return !!card && typeof card === 'object' && typeof (card as { id?: unknown }).id === 'string'
+  })
 }
 
 /**

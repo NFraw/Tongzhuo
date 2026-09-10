@@ -33,4 +33,22 @@ describe('PluginLoader', () => {
     loader.register(mockPlugin)
     expect(loader.listPlugins()).toEqual(['test'])
   })
+
+  it('rejects duplicate plugin ids instead of silently replacing a game', () => {
+    const loader = new PluginLoader()
+    loader.register(mockPlugin)
+
+    expect(() => loader.register({ ...mockPlugin, name: 'Replacement' }))
+      .toThrow('Plugin "test" is already registered')
+    expect(loader.getPlugin('test')).toBe(mockPlugin)
+  })
+
+  it.each([
+    [{ ...mockPlugin, id: '' }, 'id must be a non-empty string'],
+    [{ ...mockPlugin, minPlayers: 0 }, 'minPlayers must be a positive integer'],
+    [{ ...mockPlugin, maxPlayers: 1 }, 'maxPlayers must be greater than or equal to minPlayers'],
+  ] as const)('rejects invalid plugin metadata', (plugin, message) => {
+    const loader = new PluginLoader()
+    expect(() => loader.register(plugin)).toThrow(message)
+  })
 })

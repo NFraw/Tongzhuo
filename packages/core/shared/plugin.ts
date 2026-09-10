@@ -72,8 +72,8 @@ export interface BroadcastMessage {
  * @property checkEndNow  - 是否立即检查游戏结束（默认 true）。设为 false 可延迟检查，
  *                          例如需要等动画播放完再判定胜负时。
  */
-export interface EventResult {
-  state: GameState
+export interface EventResult<TState extends GameState = GameState> {
+  state: TState
   broadcast?: BroadcastMessage[]
   error?: string
   checkEndNow?: boolean
@@ -129,7 +129,10 @@ export interface GamePlugin {
  *   6. socket-framework 调用 getClientState 为每个玩家生成视角，推送给客户端
  *   7. socket-framework 调用 checkGameEnd 判断是否结束
  */
-export interface GameServerPlugin extends GamePlugin {
+export interface GameServerPlugin<
+  TState extends GameState = GameState,
+  TClientState extends ClientState = ClientState,
+> extends GamePlugin {
   /**
    * 创建初始游戏状态。房间开始游戏时调用一次。
    *
@@ -138,7 +141,7 @@ export interface GameServerPlugin extends GamePlugin {
    *
    * 调用处：socket-framework.ts → room:start 事件处理 → plugin.createInitialState()
    */
-  createInitialState(players: string[]): GameState
+  createInitialState(players: string[]): TState
 
   /**
    * 处理一个游戏事件。这是游戏逻辑的核心——所有的出牌、叫分、pass 等操作都经过这里。
@@ -151,7 +154,7 @@ export interface GameServerPlugin extends GamePlugin {
    *
    * 调用处：socket-framework.ts → game:action 事件处理
    */
-  handleEvent(state: GameState, playerId: string, event: string, payload: any): EventResult
+  handleEvent(state: TState, playerId: string, event: string, payload: unknown): EventResult<TState>
 
   /**
    * 从完整状态生成某玩家的"视角"。用于隐藏其他玩家的私有信息。
@@ -164,7 +167,7 @@ export interface GameServerPlugin extends GamePlugin {
    *
    * 调用处：socket-framework.ts → broadcastState()，为每个玩家单独生成并推送
    */
-  getClientState(state: GameState, playerId: string): ClientState
+  getClientState(state: TState, playerId: string): TClientState
 
   /**
    * 检查游戏是否结束。
@@ -174,7 +177,7 @@ export interface GameServerPlugin extends GamePlugin {
    *
    * 调用处：socket-framework.ts → game:action 处理完毕后调用，若返回非 null 则触发 game:over
    */
-  checkGameEnd(state: GameState): string | null
+  checkGameEnd(state: TState): string | null
 }
 
 /**

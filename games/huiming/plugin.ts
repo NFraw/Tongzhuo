@@ -14,7 +14,7 @@
  *   room:start 调用 createInitialState，broadcastState 调用 getClientState，
  *   game:action 后调用 checkGameEnd。
  */
-import type { GameServerPlugin, GameState, EventResult } from '@huiming/core-shared'
+import type { GameServerPlugin } from '@huiming/core-shared'
 import { initHuimingGame, takeCard, placeCard, flipNeighbors, checkAllFaceDown, grantDarkPickCharges, countRemainingCards } from './engine'
 import { canTake, canPlace, checkWinner, countMaxSuit } from './rules'
 import type { HuimingState, HuimingClientState } from './types'
@@ -66,15 +66,15 @@ function getClientState(state: HuimingState, playerId: string): HuimingClientSta
  *
  * 注册方式：server/src/index.ts 中调用 pluginLoader.register(huimingServerPlugin)
  */
-export const huimingServerPlugin: GameServerPlugin = {
+export const huimingServerPlugin: GameServerPlugin<HuimingState, HuimingClientState> = {
   id: 'huiming',
   name: '晦明',
   description: '基于25张扑克牌的双人博弈',
   minPlayers: 2,
-  maxPlayers: 2,
+  maxPlayers: 4,
   deckConfig: HUIMING_DECK_CONFIG,
 
-  createInitialState(players: string[]): GameState {
+  createInitialState(players: string[]): HuimingState {
     return initHuimingGame(players[0], players[1])
   },
 
@@ -93,8 +93,8 @@ export const huimingServerPlugin: GameServerPlugin = {
    *   placing 阶段（续放）：
    *     双方轮流放牌回棋盘 → 棋盘满 → 回到 taking 阶段
    */
-  handleEvent(state: GameState, playerId: string, event: string, payload: any): EventResult {
-    const game = state as HuimingState
+  handleEvent(game: HuimingState, playerId: string, event: string, payload: unknown) {
+    const state = game
     const playerIdx = game.players.findIndex(p => p.id === playerId) as 0 | 1
 
     // 通用检查：必须轮到你
@@ -107,7 +107,7 @@ export const huimingServerPlugin: GameServerPlugin = {
     switch (event) {
       case 'take': {
         if (game.phase !== 'taking') return { state, broadcast, error: '不是取牌阶段' }
-        const { row, col } = payload
+        const { row, col } = readBoardPosition(payload)
         if (!canTake(game, row, col, playerIdx)) return { state, broadcast, error: '不能取这张牌' }
 
         // 执行取牌
@@ -154,7 +154,7 @@ export const huimingServerPlugin: GameServerPlugin = {
         // 暗取事件：与 take 流程相同，区别在于 canTake() 的校验规则不同
         // （暗取需要消耗 darkPickCharges，且不能取 Joker）
         if (game.phase !== 'taking') return { state, broadcast, error: '不是取牌阶段' }
-        const { row, col } = payload
+        const { row, col } = readBoardPosition(payload)
         if (!canTake(game, row, col, playerIdx)) return { state, broadcast, error: '不能取这张牌' }
 
         takeCard(game, playerIdx, row, col)
@@ -190,7 +190,7 @@ export const huimingServerPlugin: GameServerPlugin = {
       }
 
       case 'place': {
-        const { cardId, row, col, faceUp } = payload
+        const { cardId, row, col, faceUp } = readPlacePayload(payload)
         if (game.phase === 'placing') {
           // 续放阶段：双方轮流将手牌放回棋盘
           // 续放不受"每回合限放一次"限制（规则 8）
@@ -237,7 +237,29 @@ export const huimingServerPlugin: GameServerPlugin = {
   },
 
   getClientState,
-  checkGameEnd(state: GameState): string | null {
-    return (state as HuimingState).winner
+  checkGameEnd(state: HuimingState): string | null {
+    return state.winner
   },
+}
+
+function readBoardPosition(payload: unknown): { row: number; col: number } {
+  if (!payload || typeof payload !== 'object') return { row: Number.NaN, col: Number.NaN }
+  const value = payload as Record<string, unknown>
+  return {
+    row: typeof value.row === 'number' ? value.row : Number.NaN,
+    col: typeof value.col === 'number' ? value.col : Number.NaN,
+  }
+}
+
+function readPlacePayload(payload: unknown): { cardId: string; row: number; col: number; faceUp: boolean } {
+  const position = readBoardPosition(payload)
+  if (!payload || typeof payload !== 'object') {
+    return { ...position, cardId: '', faceUp: false }
+  }
+  const value = payload as Record<string, unknown>
+  return {
+    ...position,
+    cardId: typeof value.cardId === 'string' ? value.cardId : '',
+    faceUp: value.faceUp === true,
+  }
 }

@@ -7,7 +7,7 @@ export const huimingClientPlugin: GameClientPlugin = {
   name: '晦明',
   description: '基于25张扑克牌的双人博弈',
   minPlayers: 2,
-  maxPlayers: 2,
+  maxPlayers: 4,
   deckConfig: {
     suits: ['hearts', 'diamonds', 'clubs', 'spades'],
     ranks: ['1', '2', '3', '4', '5', '6'],
