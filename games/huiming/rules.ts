@@ -15,7 +15,7 @@
  *   - canTake()：谁能取什么牌
  *   - canPlace()：谁能放牌
  *   - checkWinner()：胜利条件
- *   - countMaxSuit()：用于平局判定的最大花色计数
+ *   - countMaxSuit()：用于规则 8 收尾判定的最大花色计数
  */
 import type { Card, Suit } from '@huiming/core-shared'
 import type { HuimingPlayer, HuimingState } from './types'
@@ -35,8 +35,7 @@ const SUITS: Suit[] = ['hearts', 'spades', 'diamonds', 'clubs']
  * 规则：
  *   - 格子必须有牌
  *   - 正面朝上的牌：谁都可以取
- *   - 背面朝上的牌：需要暗取次数 > 0，且不能是 Joker
- *     （Joker 暗取太强了，所以禁止）
+ *   - 背面朝上的牌：需要暗取次数 > 0
  *
  * 调用处：plugin.ts → handleEvent('take') 和 handleEvent('darkPick')
  */
@@ -44,8 +43,9 @@ export function canTake(game: HuimingState, row: number, col: number, playerIdx:
   const cell = game.board[row]?.[col]
   if (!cell?.card) return false
   if (cell.faceUp) return true
-  // Joker 不能暗取（防止过于强力）
-  if (cell.card.suit.toString().startsWith('joker')) return false
+  // Joker 也允许暗取：早期版本禁止暗取 Joker，但当棋盘只剩一张背面朝上的
+  // Joker 时会形成死锁——它谁都取不走，countRemainingCards 永远不为 0，
+  // 结算触发不了，所有人放牌机会用尽后就没有任何合法动作。
   return game.players[playerIdx].darkPickCharges > 0
 }
 
@@ -103,8 +103,8 @@ export function checkWinner(player: HuimingPlayer): boolean {
 /**
  * 统计手牌中最大花色的牌数（含 Joker）。
  *
- * 用于平局判定：当棋盘所有牌取完且所有玩家都没集齐 6 张时，
- * 最大花色牌数多的玩家获胜。相同则进入续放阶段。
+ * 用于规则 8 的收尾判定：第一轮取空先进续放轮，**第二轮起**取空且无人集齐
+ * 6 张时才比这个数，最大者获胜；并列最大则再进一轮续放。
  *
  * @param hand - 手牌列表
  * @returns 最大花色的牌数（已包含 Joker 数量）

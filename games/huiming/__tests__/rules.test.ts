@@ -19,13 +19,13 @@ describe('canTake', () => {
     const game = initHuimingGame(['p1', 'p2'])
     expect(canTake(game, 0, 0, 0)).toBe(true)
   })
-  it('cannot dark pick a face-down joker even with charges', () => {
+  it('can dark pick a face-down joker with charges', () => {
     const game = initHuimingGame(['p1', 'p2'])
     // The Joker is fixed at the center (2,2) and starts face-down.
     expect(game.board[2][2].card?.suit.toString().startsWith('joker')).toBe(true)
     expect(game.board[2][2].faceUp).toBe(false)
     expect(game.players[0].darkPickCharges).toBeGreaterThan(0)
-    expect(canTake(game, 2, 2, 0)).toBe(false)
+    expect(canTake(game, 2, 2, 0)).toBe(true)
   })
   it('can take a face-up joker', () => {
     const game = initHuimingGame(['p1', 'p2'])

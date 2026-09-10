@@ -380,14 +380,14 @@ broadcastState(room, plugin):
 触发条件：checkAllFaceDown(board) 取牌后自动检查
 客户端：!cell.faceUp && cell.exists && darkPickCharges > 0 → 发送 onAction('darkPick', { row, col })
 服务端：canTake() → faceUp=false + darkPickCharges > 0 → 允许
-       但：Joker 暗置时不允许 → canTake 里 suit.startsWith('joker') 检查
 ```
 
-**规则 3 — Joker：** 只能在**明置**时被取走。Joker 可充当任意花色。
+**规则 3 — Joker：** 明置、暗置都可以被取走；暗置取走时消耗一次暗取能力。Joker 可充当任意花色。
 ```
-服务端限制：canTake() 里 —— 如果牌暗置且是 Joker → 返回 false
-客户端不做此判断（暗牌 card 为 null，看不到是否 Joker）
-服务端拒绝后返回 game:error → 客户端显示"不能取这张牌"
+服务端：canTake() 不区分是否 Joker，暗置时只看 darkPickCharges > 0
+（早期版本曾禁止暗取 Joker，2026-09-10 放开：该禁令会导致棋盘只剩一张
+  背面朝上的 Joker 时无人能取、结算永不触发、所有人放牌机会用尽后死锁）
+客户端不做此判断（暗牌 card 为 null，看不到是否 Joker），由服务端裁决
 ```
 
 **规则 4 — 翻牌：** 取走一张牌后，其上下左右相邻的四张牌翻面（明↔暗）。空位跳过。
@@ -667,7 +667,7 @@ App.tsx 中应由服务器事件维护的客户端状态：
 |------|------|
 | `types.ts` | HuimingState / HuimingClientState / HuimingPlayer / HuimingBoard 类型 |
 | `engine.ts` | 纯函数状态机：initHuimingGame、takeCard、flipNeighbors、placeCard、checkAllFaceDown、grantDarkPickCharges |
-| `rules.ts` | 纯函数规则校验：canTake（含 Joker 暗取限制）、canPlace、canDarkPick、checkWinner、countMaxSuit |
+| `rules.ts` | 纯函数规则校验：canTake、canPlace、canDarkPick、checkWinner、countMaxSuit |
 | `plugin.ts` | 服务端插件：createInitialState、handleEvent（take/darkPick/place 路由）、getClientState（信息隔离）、checkGameEnd |
 | `ui/client-plugin.ts` | 客户端插件定义 |
 | `ui/HuimingGame.tsx` | 游戏主界面：回合判断、手牌选择、取牌/暗取/放牌触发、明暗选择 |

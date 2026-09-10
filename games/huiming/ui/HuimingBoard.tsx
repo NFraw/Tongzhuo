@@ -24,7 +24,7 @@ export function HuimingBoard({ state, onCellClick, interactive, darkPickMode, pl
         if (!interactive) return false
         if (cell.faceUp && cell.card) return true
         // Any face-down card may be attempted in dark-pick mode; the server
-        // rejects it if it is the (hidden) face-down Joker.
+        // has the final say on what may be taken.
         if (!cell.faceUp && cell.exists && darkPickMode) return true
         if (!cell.exists && placingMode) return true
         return false

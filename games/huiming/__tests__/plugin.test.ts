@@ -14,10 +14,13 @@ describe('huimingServerPlugin client state', () => {
     expect(cell.faceUp).toBe(false)
     expect(cell.card).toBeNull()
   })
-  it('rejects dark-pick of the face-down Joker', () => {
+  it('allows dark-pick of the face-down Joker', () => {
     const state: GameState = huimingServerPlugin.createInitialState(['p1', 'p2'])
     const res = huimingServerPlugin.handleEvent(state, 'p1', 'darkPick', { row: 2, col: 2 })
-    expect(res.error).toBe('不能取这张牌')
+    expect(res.error).toBeUndefined()
+    // The Joker goes into the picker's hand and one charge is spent.
+    expect(res.state.players[0].hand[0].suit).toBe('joker_red')
+    expect(res.state.players[0].darkPickCharges).toBe(0)
   })
   it('allows dark-pick of a face-down non-Joker', () => {
     const state: GameState = huimingServerPlugin.createInitialState(['p1', 'p2'])
@@ -26,9 +29,10 @@ describe('huimingServerPlugin client state', () => {
     expect(res.error).toBeUndefined()
     expect(res.state.players[0].hand.length).toBe(1)
   })
-  it('enters placing phase when last card is dark-picked and no winner', () => {
-    // Build a minimal board: only1 card left, face-down, not a Joker.
-    // Give each player a hand that doesn't satisfy any 6-suit win condition.
+  it('takes the last card with a clear leader and still starts a renewal round (rule 8)', () => {
+    // Rule 8: emptying the board does NOT immediately compare hands — that only
+    // happens from the second round on. So even though P0 ends up with an
+    // outright lead here, the first emptying must lead to a renewal round.
     const state: GameState = huimingServerPlugin.createInitialState(['p1', 'p2'])
     const g = state as any
     // Clear the board except (0,0).
@@ -40,12 +44,11 @@ describe('huimingServerPlugin client state', () => {
     // Put one non-Joker card at (0,0), face-down.
     g.board[0][0].card = { id: 'test-h1', suit: 'hearts', rank: '1', value: 1, deckIndex: 0 }
     g.board[0][0].faceUp = false
-    // Give each player a hand with equal max-suit counts so no winner is declared.
-    // P0: hearts(2) + spades(1) after taking → max suit = hearts = 2
-    // P1: diamonds(2) + clubs(1)            → max suit = diamonds = 2
+    // After P0 takes the face-down heart: P0 max suit = hearts 3, P1 = diamonds 2.
+    // A unique leader — under the OLD (wrong) ordering P0 would have won here.
     g.players[0].hand = [
       { id: 'h2', suit: 'hearts', rank: '2', value: 2, deckIndex: 1 },
-      { id: 's1', suit: 'spades', rank: '1', value: 1, deckIndex: 2 },
+      { id: 'h3', suit: 'hearts', rank: '3', value: 3, deckIndex: 2 },
     ]
     g.players[1].hand = [
       { id: 'd1', suit: 'diamonds', rank: '1', value: 1, deckIndex: 3 },
@@ -59,6 +62,8 @@ describe('huimingServerPlugin client state', () => {
     const res = huimingServerPlugin.handleEvent(state, 'p1', 'darkPick', { row: 0, col: 0 })
     expect(res.error).toBeUndefined()
     expect(res.state.phase).toBe('placing')
+    expect(res.state.round).toBe(2)
+    expect(res.state.winner).toBeNull()
     expect(res.state.players[0].canPlace).toBe(true)
     expect(res.state.players[1].canPlace).toBe(true)
   })
@@ -187,7 +192,29 @@ describe('huimingServerPlugin multi-player', () => {
     expect(turnsAfter).toEqual([1, 2, 3, 0])
   })
 
-  it('declares the unique max-suit holder the winner when the board is emptied', () => {
+  it('starts a renewal round on the first emptying even when one player clearly leads', () => {
+    const state = huimingServerPlugin.createInitialState(['p1', 'p2', 'p3', 'p4'])
+    const g = state as any
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) g.board[r][c].card = null
+    g.board[0][0].card = tc('spades', '1', 0)
+    g.board[0][0].faceUp = true
+    g.players[0].hand = handOf('hearts', 3, 0)   // 取走 spades 后：hearts 3 → 全场唯一最大
+    g.players[1].hand = handOf('clubs', 2, 10)
+    g.players[2].hand = handOf('diamonds', 2, 20)
+    g.players[3].hand = handOf('spades', 2, 30)
+    g.players[0].darkPickCharges = 1
+    g.phase = 'taking'
+    g.currentTurn = 0
+
+    // 规则 8：第一轮取空不比大小，直接进续放轮——哪怕 p1 已经明显领先
+    const res = huimingServerPlugin.handleEvent(state, 'p1', 'take', { row: 0, col: 0 })
+    expect(res.error).toBeUndefined()
+    expect(res.state.phase).toBe('placing')
+    expect(res.state.round).toBe(2)
+    expect(res.state.winner).toBeNull()
+  })
+
+  it('declares the unique max-suit holder the winner when the board is emptied from round 2 on', () => {
     const state = huimingServerPlugin.createInitialState(['p1', 'p2', 'p3', 'p4'])
     const g = state as any
     for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) g.board[r][c].card = null
@@ -200,6 +227,7 @@ describe('huimingServerPlugin multi-player', () => {
     g.players[0].darkPickCharges = 1
     g.phase = 'taking'
     g.currentTurn = 0
+    g.round = 2   // 已经在第二轮：此时取空才比大小
 
     const res = huimingServerPlugin.handleEvent(state, 'p1', 'take', { row: 0, col: 0 })
     expect(res.error).toBeUndefined()
@@ -207,24 +235,26 @@ describe('huimingServerPlugin multi-player', () => {
     expect(res.state.phase).toBe('ended')
   })
 
-  it('starts a renewal round when the top max-suit count is tied', () => {
+  it('starts another renewal round when the top max-suit count is tied from round 2 on', () => {
     const state = huimingServerPlugin.createInitialState(['p1', 'p2', 'p3', 'p4'])
     const g = state as any
     for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) g.board[r][c].card = null
-    g.board[0][0].card = tc('spades', '1', 0)
+    g.board[0][0].card = tc('spades', '6', 0)
     g.board[0][0].faceUp = true
-    g.players[0].hand = handOf('hearts', 2, 0)   // 取走 spades 后：hearts 2 → 2
-    g.players[1].hand = handOf('clubs', 2, 10)   // 2
-    g.players[2].hand = handOf('diamonds', 2, 20) // 2
-    g.players[3].hand = handOf('spades', 2, 30)  // 2
+    g.players[0].hand = handOf('hearts', 3, 0)   // 取走 spades 6 后：hearts 3
+    g.players[1].hand = handOf('clubs', 3, 10)   // 3
+    g.players[2].hand = handOf('diamonds', 3, 20) // 3 —— 四家并列，分不出唯一最多
+    g.players[3].hand = handOf('spades', 3, 30)  // 3
     g.players[0].darkPickCharges = 1
     g.phase = 'taking'
     g.currentTurn = 0
+    g.round = 2
 
     const res = huimingServerPlugin.handleEvent(state, 'p1', 'take', { row: 0, col: 0 })
     expect(res.error).toBeUndefined()
     expect(res.state.phase).toBe('placing')
-    expect(res.state.round).toBe(2)
+    expect(res.state.round).toBe(3)
+    expect(res.state.winner).toBeNull()
     expect(res.state.currentTurn).toBe(1) // 最后取牌者(0)的下一位
     expect(res.state.players.every((p: any) => p.canPlace)).toBe(true)
   })
@@ -296,7 +326,7 @@ describe('huimingServerPlugin multi-player', () => {
     for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) g.board[r][c].card = null
     g.board[0][0].card = tc('spades', '6', 200)
     g.board[0][0].faceUp = true
-    // 每人最大花色数都是 3（且都不到 6），取牌后仍然并列 → 进入续放轮而非判负。
+    // 每人最大花色数都是 3（且都不到 6）。第一轮取空不比大小，直接进续放轮。
     g.players[0].hand = [...handOf('hearts', 3, 0), ...handOf('clubs', 3, 0)]
     g.players[1].hand = [...handOf('hearts', 3, 0), ...handOf('clubs', 3, 0)]
     g.players[2].hand = [...handOf('diamonds', 3, 0), ...handOf('spades', 3, 0)]
@@ -333,5 +363,45 @@ describe('huimingServerPlugin multi-player', () => {
     expect(g.phase).toBe('taking')
     expect(g.board.every((row: any[]) => row.every((cell: any) => cell.card !== null))).toBe(true)
     expect(g.players.every((p: any) => p.hand.length === 0)).toBe(true)
+  })
+})
+
+describe('huimingServerPlugin lone face-down Joker', () => {
+  /**
+   * 回归：棋盘只剩一张背面朝上的 Joker 时，它必须可被取走。
+   *
+   * 早期版本禁止暗取 Joker，于是这个局面没有任何合法动作：Joker 谁都取不走 →
+   * countRemainingCards 永远不为 0 → 结算触发不了 → 进不了续放轮 → 放牌机会
+   * 用尽后游戏永久冻结。这里故意把三位玩家的 canPlace 都设为 false，确保唯一
+   * 的出路是取走 Joker 本身。
+   */
+  it('lets the current player take it and unfreezes the game', () => {
+    const state: GameState = huimingServerPlugin.createInitialState(['p1', 'p2', 'p3'])
+    const g = state as any
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        g.board[r][c].card = null
+        g.board[r][c].faceUp = false
+      }
+    }
+    g.board[2][2].card = tc('joker_red', 'JOKER', 24)
+    g.board[2][2].faceUp = false
+    // 放牌机会全部用尽 + 手牌都不足以获胜 → 若不改规则就是死锁局面
+    for (const p of g.players) p.canPlace = false
+    g.players[0].hand = [tc('hearts', '2', 10)]
+    g.players[0].darkPickCharges = 1
+    g.players[1].hand = [tc('hearts', '3', 11), tc('clubs', '2', 12)]
+    g.players[2].hand = [tc('spades', '2', 13)]
+    g.phase = 'taking'
+    g.currentTurn = 0
+
+    // 唯一的合法动作就是把这张背面 Joker 取走
+    const res = huimingServerPlugin.handleEvent(state, 'p1', 'darkPick', { row: 2, col: 2 })
+    expect(res.error).toBeUndefined()
+    expect(g.board[2][2].card).toBeNull()
+    // 取走后棋盘清空 → 第一轮按规则 8 进续放轮，游戏得以继续推进（不再冻结）
+    expect(g.phase).toBe('placing')
+    expect(g.round).toBe(2)
+    expect(g.winner).toBeNull()
   })
 })

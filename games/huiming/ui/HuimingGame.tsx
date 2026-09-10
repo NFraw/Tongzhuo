@@ -32,8 +32,8 @@ export function HuimingGame({ state, playerId, onAction, playerNames = {} }: Gam
     }
     // Dark pick: card exists but face-down, and player has charges. Whether it
     // is a Joker is hidden info (the client sees card:null), so the client may
-    // attempt any face-down card — the server's canTake enforces the
-    // "Joker can only be taken when face-up" rule and rejects the center Joker.
+    // attempt any face-down card — the server's canTake is the authority on
+    // what may be taken.
     else if (!cell.faceUp && cell.exists && s.myDarkPickCharges > 0) {
       onAction('darkPick', { row, col })
     }

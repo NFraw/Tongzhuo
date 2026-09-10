@@ -18,7 +18,7 @@ Lay the 25 cards face down in a **5x5 grid** on the table. The center card is al
 
 1. **Taking a card**: On your turn, you may take one face-up card.
 2. **Taking face-down cards**: Whenever all cards on the table are face down, all players each gain the ability to take one face-down card directly. The ability is kept and stacks.
-3. **The Joker**: It can only be taken while face up, and it can count as any suit.
+3. **The Joker**: It can be taken face up or face down (taking it face down costs one face-down-taking charge), and it can count as any suit.
 4. **Flipping**: When a card is taken, flip its four neighbors (up, down, left, right) — face down becomes face up, and face up becomes face down. The empty space left behind is not flipped.
 5. **End of turn**: Taking a card immediately ends the current player's turn.
 6. **Placing a card**: Once per game per player, on your turn you may place one card from your hand into an empty space on the table, face up or face down as you choose. Note: **on a turn, you must place first, then take.**
@@ -28,7 +28,7 @@ Lay the 25 cards face down in a **5x5 grid** on the table. The center card is al
 ## Tips to Get You Started
 
 - All cards start face down, so all players gain the ability to take a face-down card. The first player must use it immediately, while the second player can save it — this balances the advantage of going first.
-- The Joker is powerful, but it can only be taken face up, so the four cards adjacent to it matter just as much.
+- The Joker is powerful, and it sits in the exact center, so "the center is the Joker" is public knowledge from the start — the only question is when it will be face up. It starts face down: you can take it directly by spending a face-down-taking charge, or you can take one of its neighbours to flip it face up, after which anyone can take it for free on their turn. Whether to save a charge for it or flip it out and leave it to chance is a key trade-off in this game.
 - Except for cards taken face down, all card information is shared. Winning takes constant thinking and memory — and, when necessary, a little courage to gamble.
 - Make the most of your one-time card placement: use it to block your opponent, or to build a bridge to victory.
 - Once the second round begins, the game changes: all players know each other's hands, and choosing whether to collect your own suit or break your opponent's becomes the key decision.

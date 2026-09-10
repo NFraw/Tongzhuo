@@ -90,7 +90,7 @@ export const huimingServerPlugin: GameServerPlugin<HuimingState, HuimingClientSt
    * 状态转换流程：
    *   taking 阶段：
    *     取牌 → 翻开邻居 → 检查全暗 → 检查胜利 → 检查棋盘清空
-   *     棋盘清空 → 比较最大花色 → 有人多则结束 / 相同则续放
+   *     棋盘清空 → 第一轮：进续放轮；第二轮起：比最大花色 → 唯一最多者胜 / 并列则再续放
    *   placing 阶段（续放）：
    *     所有玩家轮流放牌回棋盘 → 棋盘满 → 回到 taking 阶段
    */
@@ -126,7 +126,7 @@ export const huimingServerPlugin: GameServerPlugin<HuimingState, HuimingClientSt
 
       case 'darkPick': {
         // 暗取事件：与 take 流程相同，区别在于 canTake() 的校验规则不同
-        // （暗取需要消耗 darkPickCharges，且不能取 Joker）
+        // （暗取需要消耗 darkPickCharges）
         if (game.phase !== 'taking') return { state, broadcast, error: '不是取牌阶段' }
         const { row, col } = readBoardPosition(payload)
         if (!canTake(game, row, col, playerIdx)) return { state, broadcast, error: '不能取这张牌' }
@@ -241,9 +241,15 @@ function findNextPlayerWithCards(game: HuimingState, from: number): number {
  * 取牌后的统一收尾：
  *   1. 取牌者集齐 6 张同花色 → 该玩家获胜，游戏结束
  *   2. 棋盘还有牌 → 轮转下一位
- *   3. 棋盘取空 → 比各玩家的最大花色牌数：
- *        - 唯一最大者获胜
- *        - 并列最大 → 进入续放轮（规则 8），先手为最后取牌者的下一位
+ *   3. 棋盘取空（规则 8）：
+ *        - 第一轮取空 → 无条件进入续放轮（先手为最后取牌者的下一位）
+ *        - 第二轮起取空 → 比各玩家手牌的最大花色牌数：唯一最大者获胜，
+ *          并列最大 → 再进一轮续放，如此反复
+ *
+ * 注意 3 的顺序：规则原文是「取空 → 先进续放轮 → 续放后仍无人集齐六张
+ * 才比大小」，所以第一轮取空时**不比大小**，哪怕此刻已经有人最大花色
+ * 明显领先。（早期实现是「取空即比大小、只有并列才续放」，与规则原文相反，
+ * 2026-09-10 按用户决定改为对齐原文。）
  */
 function resolveAfterTake(game: HuimingState, playerIdx: number): void {
   if (checkWinner(game.players[playerIdx])) {
@@ -258,13 +264,16 @@ function resolveAfterTake(game: HuimingState, playerIdx: number): void {
     return
   }
 
-  const scores = game.players.map(p => countMaxSuit(p.hand))
-  const best = Math.max(...scores)
-  const leaders = game.players.filter((_, i) => scores[i] === best)
-  if (leaders.length === 1) {
-    game.phase = 'ended'
-    game.winner = leaders[0].id
-    return
+  // 第二轮起，取空后才进入比大小判定
+  if (game.round > 1) {
+    const scores = game.players.map(p => countMaxSuit(p.hand))
+    const best = Math.max(...scores)
+    const leaders = game.players.filter((_, i) => scores[i] === best)
+    if (leaders.length === 1) {
+      game.phase = 'ended'
+      game.winner = leaders[0].id
+      return
+    }
   }
 
   game.round++
