@@ -282,4 +282,56 @@ describe('huimingServerPlugin multi-player', () => {
     }
     expect(g.currentTurn).toBe(0) // 3 人转一圈回到 0
   })
+
+  it('rejects an event from a player who is not in the game', () => {
+    const state = huimingServerPlugin.createInitialState(['p1', 'p2', 'p3', 'p4'])
+    const res = huimingServerPlugin.handleEvent(state, 'ghost', 'take', { row: 0, col: 0 })
+    expect(res.error).toBe('玩家不在游戏中')
+  })
+
+  it('plays a complete renewal round: empty board, everyone re-places, board refills', () => {
+    const state = huimingServerPlugin.createInitialState(['p1', 'p2', 'p3', 'p4'])
+    const g = state as any
+    // 棋盘只留一张明牌，其余 24 张全在玩家手里 —— 与「牌堆取空」时的真实分布一致。
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) g.board[r][c].card = null
+    g.board[0][0].card = tc('spades', '6', 200)
+    g.board[0][0].faceUp = true
+    // 每人最大花色数都是 3（且都不到 6），取牌后仍然并列 → 进入续放轮而非判负。
+    g.players[0].hand = [...handOf('hearts', 3, 0), ...handOf('clubs', 3, 0)]
+    g.players[1].hand = [...handOf('hearts', 3, 0), ...handOf('clubs', 3, 0)]
+    g.players[2].hand = [...handOf('diamonds', 3, 0), ...handOf('spades', 3, 0)]
+    g.players[3].hand = [...handOf('diamonds', 3, 0), ...handOf('spades', 3, 0)]
+    g.phase = 'taking'
+    g.currentTurn = 0
+
+    // p0 取走最后一张牌：手牌 max 花色仍是 3，四家并列 → 续放轮
+    const taken = huimingServerPlugin.handleEvent(state, 'p1', 'take', { row: 0, col: 0 })
+    expect(taken.error).toBeUndefined()
+    expect(taken.state.phase).toBe('placing')
+    expect(taken.state.round).toBe(2)
+    expect(taken.state.currentTurn).toBe(1)
+    expect(g.board.every((row: any[]) => row.every((cell: any) => cell.card === null))).toBe(true)
+
+    // 所有人把整手牌放回棋盘；每步都重新读 currentTurn，因为空手牌会被自动跳过。
+    const cells: [number, number][] = []
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) cells.push([r, c])
+    for (let i = 0; i < cells.length; i++) {
+      const [r, c] = cells[i]
+      const idx: number = g.currentTurn
+      const card = g.players[idx].hand[0]
+      const res = huimingServerPlugin.handleEvent(state, g.players[idx].id, 'place', {
+        cardId: card.id,
+        row: r,
+        col: c,
+        faceUp: true,
+      })
+      expect(res.error).toBeUndefined()
+      if (i < cells.length - 1) expect(g.phase).toBe('placing')
+    }
+
+    // 棋盘重新铺满 → 回到取牌阶段，且所有手牌都出空了
+    expect(g.phase).toBe('taking')
+    expect(g.board.every((row: any[]) => row.every((cell: any) => cell.card !== null))).toBe(true)
+    expect(g.players.every((p: any) => p.hand.length === 0)).toBe(true)
+  })
 })
