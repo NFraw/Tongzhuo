@@ -5,7 +5,7 @@ import { HuimingGame } from './HuimingGame'
 export const huimingClientPlugin: GameClientPlugin = {
   id: 'huiming',
   name: '晦明',
-  description: '基于25张扑克牌的双人博弈',
+  description: '基于25张扑克牌的2~4人博弈',
   minPlayers: 2,
   maxPlayers: 4,
   deckConfig: {

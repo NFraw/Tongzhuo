@@ -70,7 +70,7 @@ function getClientState(state: HuimingState, playerId: string): HuimingClientSta
 export const huimingServerPlugin: GameServerPlugin<HuimingState, HuimingClientState> = {
   id: 'huiming',
   name: '晦明',
-  description: '基于25张扑克牌的双人博弈',
+  description: '基于25张扑克牌的2~4人博弈',
   minPlayers: 2,
   maxPlayers: 4,
   deckConfig: HUIMING_DECK_CONFIG,
