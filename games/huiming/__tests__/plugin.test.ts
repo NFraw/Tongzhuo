@@ -1,11 +1,11 @@
 // games/huiming/__tests__/plugin.test.ts
 import { describe, it, expect } from 'vitest'
 import { huimingServerPlugin } from '../plugin'
-import type { GameState } from '@huiming/core-shared'
+import type { HuimingState } from '../types'
 
 describe('huimingServerPlugin client state', () => {
   it('hides the value of face-down cards from a player', () => {
-    const state: GameState = huimingServerPlugin.createInitialState(['p1', 'p2'])
+    const state: HuimingState = huimingServerPlugin.createInitialState(['p1', 'p2'])
     const cs = huimingServerPlugin.getClientState(state, 'p1')
     // The center (2,2) is the face-down Joker — the client must not see its
     // value, only that the cell exists and is face-down.
@@ -15,7 +15,7 @@ describe('huimingServerPlugin client state', () => {
     expect(cell.card).toBeNull()
   })
   it('allows dark-pick of the face-down Joker', () => {
-    const state: GameState = huimingServerPlugin.createInitialState(['p1', 'p2'])
+    const state: HuimingState = huimingServerPlugin.createInitialState(['p1', 'p2'])
     const res = huimingServerPlugin.handleEvent(state, 'p1', 'darkPick', { row: 2, col: 2 })
     expect(res.error).toBeUndefined()
     // The Joker goes into the picker's hand and one charge is spent.
@@ -23,7 +23,7 @@ describe('huimingServerPlugin client state', () => {
     expect(res.state.players[0].darkPickCharges).toBe(0)
   })
   it('allows dark-pick of a face-down non-Joker', () => {
-    const state: GameState = huimingServerPlugin.createInitialState(['p1', 'p2'])
+    const state: HuimingState = huimingServerPlugin.createInitialState(['p1', 'p2'])
     // (0,0) is never the Joker (Joker is fixed at the center).
     const res = huimingServerPlugin.handleEvent(state, 'p1', 'darkPick', { row: 0, col: 0 })
     expect(res.error).toBeUndefined()
@@ -33,7 +33,7 @@ describe('huimingServerPlugin client state', () => {
     // Rule 8: emptying the board does NOT immediately compare hands — that only
     // happens from the second round on. So even though P0 ends up with an
     // outright lead here, the first emptying must lead to a renewal round.
-    const state: GameState = huimingServerPlugin.createInitialState(['p1', 'p2'])
+    const state: HuimingState = huimingServerPlugin.createInitialState(['p1', 'p2'])
     const g = state as any
     // Clear the board except (0,0).
     for (let r = 0; r < 5; r++) {
@@ -68,7 +68,7 @@ describe('huimingServerPlugin client state', () => {
     expect(res.state.players[1].canPlace).toBe(true)
   })
   it('transitions to taking when both players have no cards to place', () => {
-    const state: GameState = huimingServerPlugin.createInitialState(['p1', 'p2'])
+    const state: HuimingState = huimingServerPlugin.createInitialState(['p1', 'p2'])
     const g = state as any
     // A placing phase where neither player holds any cards.
     g.phase = 'placing'
@@ -83,7 +83,7 @@ describe('huimingServerPlugin client state', () => {
     expect(res.state.currentTurn).toBe(1) // turn passed to P1
   })
   it('keeps placing until ALL cards are back on the board, not just one each', () => {
-    const state: GameState = huimingServerPlugin.createInitialState(['p1', 'p2'])
+    const state: HuimingState = huimingServerPlugin.createInitialState(['p1', 'p2'])
     const g = state as any
     g.phase = 'placing'
     g.currentTurn = 0
@@ -114,7 +114,7 @@ describe('huimingServerPlugin client state', () => {
     expect(res.state.phase).toBe('taking')
   })
   it('skips a player with no cards and keeps placing for the other', () => {
-    const state: GameState = huimingServerPlugin.createInitialState(['p1', 'p2'])
+    const state: HuimingState = huimingServerPlugin.createInitialState(['p1', 'p2'])
     const g = state as any
     g.phase = 'placing'
     g.currentTurn = 0
@@ -144,8 +144,10 @@ describe('huimingServerPlugin client state', () => {
 
 // —— 多人（2~4 人）用例 ——
 // 这些用例在「只加人数、规则不变」的前提下，验证引擎能被泛化为 N 人。
+// id 里必须编进 deckIndex：夹具会为不同玩家重复取用同一 (suit, rank) 组合
+// （真实牌堆靠 deckIndex 区分它们），只用 suit-rank 当 id 会撞车。
 function tc(suit: string, rank: string, deckIndex: number) {
-  return { id: `${suit}-${rank}`, suit, rank, value: Number(rank) || 1, deckIndex }
+  return { id: `${suit}-${rank}-${deckIndex}`, suit, rank, value: Number(rank) || 1, deckIndex }
 }
 
 function handOf(suit: string, n: number, offset = 0) {
@@ -157,9 +159,11 @@ function fillBoardExcept(g: any, holes: [number, number][]) {
   const holeSet = new Set(holes.map(([r, c]) => `${r},${c}`))
   for (let r = 0; r < 5; r++) {
     for (let c = 0; c < 5; c++) {
+      // 每格一个 deckIndex，避免 23 张棋盘牌共用同一个 id；偏移取 1000+
+      // 是为了和手牌夹具用的 0~200 区间错开。
       g.board[r][c].card = holeSet.has(`${r},${c}`)
         ? null
-        : tc('hearts', '1', 0)
+        : tc('hearts', '1', 1000 + r * 5 + c)
       g.board[r][c].faceUp = false
     }
   }
@@ -271,13 +275,13 @@ describe('huimingServerPlugin multi-player', () => {
     g.currentTurn = 0
 
     // p1 放牌后，应跳过空手牌的 p2，轮到 p3
-    let res = huimingServerPlugin.handleEvent(state, 'p1', 'place', { cardId: 'hearts-1', row: 0, col: 0, faceUp: true })
+    let res = huimingServerPlugin.handleEvent(state, 'p1', 'place', { cardId: g.players[0].hand[0].id, row: 0, col: 0, faceUp: true })
     expect(res.error).toBeUndefined()
     expect(res.state.currentTurn).toBe(2)
     expect(res.state.phase).toBe('placing')
 
     // p3 放最后一张，棋盘填满 → 回到取牌阶段
-    res = huimingServerPlugin.handleEvent(state, 'p3', 'place', { cardId: 'clubs-1', row: 0, col: 1, faceUp: true })
+    res = huimingServerPlugin.handleEvent(state, 'p3', 'place', { cardId: g.players[2].hand[0].id, row: 0, col: 1, faceUp: true })
     expect(res.state.phase).toBe('taking')
     expect(res.state.currentTurn).toBe(3) // (2 + 1) % 4
   })
@@ -327,10 +331,11 @@ describe('huimingServerPlugin multi-player', () => {
     g.board[0][0].card = tc('spades', '6', 200)
     g.board[0][0].faceUp = true
     // 每人最大花色数都是 3（且都不到 6）。第一轮取空不比大小，直接进续放轮。
-    g.players[0].hand = [...handOf('hearts', 3, 0), ...handOf('clubs', 3, 0)]
-    g.players[1].hand = [...handOf('hearts', 3, 0), ...handOf('clubs', 3, 0)]
-    g.players[2].hand = [...handOf('diamonds', 3, 0), ...handOf('spades', 3, 0)]
-    g.players[3].hand = [...handOf('diamonds', 3, 0), ...handOf('spades', 3, 0)]
+    // 四家的 offset 依次错开，好让 24 张手牌的 deckIndex（也就是 id）互不相同。
+    g.players[0].hand = [...handOf('hearts', 3, 0), ...handOf('clubs', 3, 3)]
+    g.players[1].hand = [...handOf('hearts', 3, 6), ...handOf('clubs', 3, 9)]
+    g.players[2].hand = [...handOf('diamonds', 3, 12), ...handOf('spades', 3, 15)]
+    g.players[3].hand = [...handOf('diamonds', 3, 18), ...handOf('spades', 3, 21)]
     g.phase = 'taking'
     g.currentTurn = 0
 
@@ -376,7 +381,7 @@ describe('huimingServerPlugin lone face-down Joker', () => {
    * 的出路是取走 Joker 本身。
    */
   it('lets the current player take it and unfreezes the game', () => {
-    const state: GameState = huimingServerPlugin.createInitialState(['p1', 'p2', 'p3'])
+    const state: HuimingState = huimingServerPlugin.createInitialState(['p1', 'p2', 'p3'])
     const g = state as any
     for (let r = 0; r < 5; r++) {
       for (let c = 0; c < 5; c++) {

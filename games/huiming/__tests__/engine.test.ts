@@ -105,7 +105,9 @@ describe('placeCard', () => {
     game.players[0].canPlace = true
     const result = placeCard(game, 0, 'test', 0, 0, true)
     expect(result.success).toBe(true)
-    expect(game.board[0][0].card?.id).toBe('test')
+    // 断言整张牌而不是 `card?.id`：上面那句 `card = null` 会让 TS 把该格子
+    // 一直收窄成 never，直接取 `.id` 会报 TS2339（收窄不会被函数调用打断）。
+    expect(game.board[0][0].card).toEqual(card)
     expect(game.players[0].canPlace).toBe(false)
   })
 
