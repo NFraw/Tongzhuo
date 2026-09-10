@@ -103,7 +103,7 @@ export function checkWinner(player: HuimingPlayer): boolean {
 /**
  * 统计手牌中最大花色的牌数（含 Joker）。
  *
- * 用于平局判定：当棋盘所有牌取完且双方都没集齐 6 张时，
+ * 用于平局判定：当棋盘所有牌取完且所有玩家都没集齐 6 张时，
  * 最大花色牌数多的玩家获胜。相同则进入续放阶段。
  *
  * @param hand - 手牌列表

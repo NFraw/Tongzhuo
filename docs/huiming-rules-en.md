@@ -23,7 +23,7 @@ Lay the 25 cards face down in a **5x5 grid** on the table. The center card is al
 5. **End of turn**: Taking a card immediately ends the current player's turn.
 6. **Placing a card**: Once per game per player, on your turn you may place one card from your hand into an empty space on the table, face up or face down as you choose. Note: **on a turn, you must place first, then take.**
 7. **Winning**: The first player to collect six cards of any one suit wins.
-8. **Stalemate -> next round**: If only one card remains on the table and no one has collected six cards of a suit, the game moves to the next round — the player who went second in the previous round (the one after whoever took the last card) starts, and all players take turns placing cards from their hands into empty spaces (face up or face down, as they choose). Once all cards are placed, rules 1-6 continue. If still no one has collected six of a suit, the player with the most cards of a single suit in hand wins; if several players tie for the most, another round begins.
+8. **Stalemate -> next round**: If every card on the table has been taken and no one has collected six cards of a suit, the game moves to the next round — the seat after whoever took the last card starts, and all players take turns placing cards from their hands into empty spaces (face up or face down, as they choose). Once all cards are placed, rules 1-6 continue. If still no one has collected six of a suit, the player with the most cards of a single suit in hand wins; if several players tie for the most, another round begins, repeating until a single player holds the most.
 
 ## Tips to Get You Started
 

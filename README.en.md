@@ -8,7 +8,7 @@ An online multiplayer card game platform supporting multiple card games, built w
 
 | Game | Players | Description |
 |------|---------|-------------|
-| **Huiming** | 2 | A strategic two-player game with 25 cards. Cards flip between face-up and face-down — collect 6 of the same suit to win. See [docs/huiming-rules-en.md](docs/huiming-rules-en.md) |
+| **Huiming** | 2-4 | A strategic 2-4 player game with 25 cards. Cards flip between face-up and face-down — collect 6 of the same suit to win. See [docs/huiming-rules-en.md](docs/huiming-rules-en.md) |
 | **Landlord (Dou Di Zhu)** | 3 | Classic Chinese card game with bidding, bombs, and spring mechanics. Features voice chat and animations. |
 | **Nimmt!** | 2-10 | Strategic card game — pick a card each round and place it in the right row, avoiding collecting bull heads. |
 
