@@ -18,7 +18,7 @@
  *   - 游戏中离开会解散整个房间
  */
 import { randomBytes } from 'crypto'
-import type { Room, RoomPlayer, RoomSummary, RoomPlayerSummary, RoomPhase } from '@huiming/core-shared'
+import type { Room, RoomPlayer, RoomSummary, RoomPlayerSummary, RoomPhase } from '@tongzhuo/core-shared'
 
 export class RoomManager {
   private rooms = new Map<string, Room>()

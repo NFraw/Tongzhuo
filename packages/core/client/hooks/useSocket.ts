@@ -25,7 +25,7 @@
  */
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
-import { PROTOCOL_VERSION } from '@huiming/core-shared'
+import { PROTOCOL_VERSION } from '@tongzhuo/core-shared'
 
 const PLAYER_ID_KEY = 'huiming-player-id'
 const PLAYER_NAME_KEY = 'huiming-player-name'

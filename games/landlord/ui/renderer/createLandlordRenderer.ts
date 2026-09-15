@@ -12,7 +12,7 @@
  *   - GameCanvas.tsx → 调用 rendererFactory() 创建渲染器
  */
 import type { Application } from 'pixi.js'
-import type { GameRendererFactory, RendererFactoryContext } from '@huiming/core-shared'
+import type { GameRendererFactory, RendererFactoryContext } from '@tongzhuo/core-shared'
 import { LandlordRenderer } from './LandlordRenderer'
 
 export const createLandlordRenderer: GameRendererFactory = async (

@@ -1,5 +1,5 @@
 // games/nimmt/ui/client-plugin.ts
-import type { GameClientPlugin } from '@huiming/core-shared'
+import type { GameClientPlugin } from '@tongzhuo/core-shared'
 import { NimmtGame } from './NimmtGame'
 
 export const nimmtClientPlugin: GameClientPlugin = {

@@ -14,7 +14,7 @@
  *   room:start 调用 createInitialState，broadcastState 调用 getClientState，
  *   game:action 后调用 checkGameEnd。
  */
-import type { GameServerPlugin } from '@huiming/core-shared'
+import type { GameServerPlugin } from '@tongzhuo/core-shared'
 import { initHuimingGame, takeCard, placeCard, flipNeighbors, checkAllFaceDown, grantDarkPickCharges, countRemainingCards } from './engine'
 import { canTake, canPlace, checkWinner, countMaxSuit } from './rules'
 import type { HuimingState, HuimingClientState } from './types'

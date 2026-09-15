@@ -1,16 +1,18 @@
 **English** | [简体中文](README.md)
 
-# Happy Cards (Huanle Kapai)
+# Tongzhuo
 
-An online multiplayer card game platform supporting multiple card games, built with TypeScript + React + Node.js + Socket.IO. Available on web browsers and Electron desktop.
+An open-source, extensible online multiplayer game platform for party games, card games, board games and social games. Built with TypeScript + React + Node.js + Socket.IO, available in web browsers and as an Electron desktop app, with a plugin system for adding new games.
 
-## Games
+## Included Games
 
 | Game | Players | Description |
 |------|---------|-------------|
 | **Huiming** | 2-4 | A strategic 2-4 player game with 25 cards. Cards flip between face-up and face-down — collect 6 of the same suit to win. See [docs/huiming-rules-en.md](docs/huiming-rules-en.md) |
 | **Landlord (Dou Di Zhu)** | 3 | Classic Chinese card game with bidding, bombs, and spring mechanics. Features voice chat and animations. |
 | **Nimmt!** | 2-10 | Strategic card game — pick a card each round and place it in the right row, avoiding collecting bull heads. |
+
+Adding a game means implementing two interfaces, `GameServerPlugin` and `GameClientPlugin`. The platform itself knows nothing about specific rules, so party, board and social games can all be plugged in the same way.
 
 ## Tech Stack
 
@@ -22,7 +24,7 @@ An online multiplayer card game platform supporting multiple card games, built w
 ## Project Structure
 
 ```
-huiming/
+tongzhuo/
 ├── packages/
 │   └── core/
 │       ├── shared/      # Shared types, card utilities, plugin interfaces
@@ -64,4 +66,6 @@ Open `http://localhost:5173` in your browser, enter a nickname, and join the lob
 
 ## License
 
-All rights reserved. Game rules and assets belong to the author. For commercial use or reprints, please contact the author.
+The source code is licensed under the [MIT License](LICENSE).
+
+Note: third-party audio and art assets under `voice/`, `bgm/` and `assets/` (for example the Dou Di Zhu voice lines and background music) are **not** covered by the MIT License and remain the property of their respective owners. Do not use them commercially or redistribute them; replace them before publishing a derivative work.

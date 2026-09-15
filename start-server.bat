@@ -1,10 +1,10 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Huiming Online Server
+title Tongzhuo Online Server
 
 REM ============================================================
-REM  Huiming Online Server - separate deployment
+REM  Tongzhuo Online Server - separate deployment
 REM  ----------------------------------------------------------
 REM  Fixed port to expose for online play.
 REM    LAN access : other devices connect to http://<host-ip>:<port>
@@ -19,9 +19,12 @@ set PORT=3001
 if not "%1"=="" set PORT=%1
 
 echo.
-echo  Huiming Online Server
+echo  Tongzhuo Online Server
 echo  ------------------------------------------
 echo  1. Stopping any existing server process...
+REM The matcher below uses '*huiming*' because it matches the repo FOLDER name
+REM inside the node command line (…\huiming\server\src\index.ts), not the
+REM platform name. Update it if you rename the folder.
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like '*huiming*' -and $_.CommandLine -like '*src/index.ts*' }); if ($p.Count -gt 0) { $p | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }; Write-Host ('    Killed ' + $p.Count + ' old server process(es).') } else { Write-Host '    No old server process found.' }"
 
 echo  2. Building client with latest code...

@@ -6,8 +6,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@huiming/core-shared": "*",
-    "@huiming/core-server": "*"
+    "@tongzhuo/core-shared": "*",
+    "@tongzhuo/core-server": "*"
   },
   "devDependencies": {
     "vitest": "^3.0.0"

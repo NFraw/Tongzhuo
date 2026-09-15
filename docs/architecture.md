@@ -1,6 +1,6 @@
-# 晦明数字版 — 架构设计文档
+# Tongzhuo — 架构设计文档
 
-> 通用卡牌联机平台 + 晦明游戏插件的技术架构详解
+> 开源、可扩展的在线多人游戏平台（派对 / 纸牌 / 棋盘 / 社交游戏）与插件化游戏系统的技术架构详解，并以晦明插件为例。
 
 ## 目录
 
@@ -663,7 +663,7 @@ games/<gameId>/
 ```typescript
 // games/<gameId>/types.ts
 
-import type { Card } from '@huiming/core-shared'
+import type { Card } from '@tongzhuo/core-shared'
 
 // 游戏专用状态（服务端维护的完整状态）
 export interface MyGameState {
@@ -701,7 +701,7 @@ export function canDoSomething(game: MyGameState, ...): boolean { ... }
 ```typescript
 // games/<gameId>/plugin.ts
 
-import type { GameServerPlugin } from '@huiming/core-shared'
+import type { GameServerPlugin } from '@tongzhuo/core-shared'
 
 export const myServerPlugin: GameServerPlugin = {
   id: 'mygame',
@@ -723,7 +723,7 @@ export const myServerPlugin: GameServerPlugin = {
 ```typescript
 // games/<gameId>/ui/client-plugin.ts
 
-import type { GameClientPlugin } from '@huiming/core-shared'
+import type { GameClientPlugin } from '@tongzhuo/core-shared'
 import { MyGameComponent } from './GameComponent'
 
 export const myClientPlugin: GameClientPlugin = {
@@ -740,7 +740,7 @@ export const myClientPlugin: GameClientPlugin = {
 ```tsx
 // games/<gameId>/ui/GameComponent.tsx
 
-import type { GameComponentProps } from '@huiming/core-shared'
+import type { GameComponentProps } from '@tongzhuo/core-shared'
 
 export function MyGameComponent({ state, playerId, onAction }: GameComponentProps) {
   // 渲染游戏界面

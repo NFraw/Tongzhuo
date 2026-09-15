@@ -14,7 +14,7 @@
  *   - engine.ts 中的 cattleHeads() 改变牛头数计算
  *   - board 行数在 createNimmtGame 中硬编码为 4
  */
-import type { Card } from '@huiming/core-shared'
+import type { Card } from '@tongzhuo/core-shared'
 
 /**
  * 牛头人玩家状态。

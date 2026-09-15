@@ -1,4 +1,4 @@
-import type { GameClientPlugin } from '@huiming/core-shared'
+import type { GameClientPlugin } from '@tongzhuo/core-shared'
 import { LandlordGame } from './LandlordGame'
 import { createLandlordRenderer } from './renderer'
 

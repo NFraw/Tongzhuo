@@ -9,7 +9,7 @@
  * 安全原则：永远不要信任客户端数据。isValidPlay() 会用服务器端的手牌数据
  * 替换客户端传来的牌，确保玩家只能出自己手里有的牌。
  */
-import type { Card } from '@huiming/core-shared'
+import type { Card } from '@tongzhuo/core-shared'
 import type { LandlordState } from './types'
 import { getHandType, canBeat } from './hand'
 

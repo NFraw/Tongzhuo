@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest'
 import { canTake, canPlace, canDarkPick, checkWinner, countMaxSuit } from '../rules'
 import { initHuimingGame } from '../engine'
-import type { Card } from '@huiming/core-shared'
+import type { Card } from '@tongzhuo/core-shared'
 
 describe('canTake', () => {
   it('can take face-up card', () => {

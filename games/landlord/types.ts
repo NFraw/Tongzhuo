@@ -13,7 +13,7 @@
  *   - 在 LandlordClientState 中加字段 → 修改 plugin.ts 的 getClientState()
  *   - 确保 UI 组件（LandlordGame.tsx）读取新字段
  */
-import type { Card } from '@huiming/core-shared'
+import type { Card } from '@tongzhuo/core-shared'
 
 /**
  * 斗地主所有合法牌型。hand.ts 的 getHandType() 返回这些值之一。

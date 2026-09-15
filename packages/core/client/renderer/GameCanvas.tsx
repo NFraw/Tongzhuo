@@ -22,7 +22,7 @@
  */
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Application, isWebGLSupported } from 'pixi.js'
-import type { GameRendererFactory, RendererFactoryContext } from '@huiming/core-shared'
+import type { GameRendererFactory, RendererFactoryContext } from '@tongzhuo/core-shared'
 
 // 开发环境检测（Vite、Webpack、Node 都兼容）
 const isDev = typeof process !== 'undefined'

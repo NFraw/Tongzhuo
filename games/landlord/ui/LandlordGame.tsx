@@ -24,9 +24,9 @@
  *   - 语音：修改 pickVoice() 和音效触发逻辑
  */
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
-import type { GameComponentProps, Card } from '@huiming/core-shared'
-import { GameCanvas } from '@huiming/core-client/renderer'
-import { useAudio } from '@huiming/core-client/hooks'
+import type { GameComponentProps, Card } from '@tongzhuo/core-shared'
+import { GameCanvas } from '@tongzhuo/core-client/renderer'
+import { useAudio } from '@tongzhuo/core-client/hooks'
 import { CardImage } from './CardImage'
 import { createLandlordRenderer } from './renderer'
 import type { LandlordClientState, HandType } from '../types'

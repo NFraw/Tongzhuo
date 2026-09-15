@@ -18,7 +18,7 @@
  *   - cattleHeads()：每张牌的牛头数计算规则
  *   - board 行数在 createNimmtGame 中硬编码为 4
  */
-import { shuffleDeck, type Card } from '@huiming/core-shared'
+import { shuffleDeck, type Card } from '@tongzhuo/core-shared'
 import type { NimmtPlayer, NimmtState, ResolveStep } from './types'
 
 const TOTAL_CARDS = 104

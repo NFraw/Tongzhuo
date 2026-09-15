@@ -17,7 +17,7 @@
  *   - checkWinner()：胜利条件
  *   - countMaxSuit()：用于规则 8 收尾判定的最大花色计数
  */
-import type { Card, Suit } from '@huiming/core-shared'
+import type { Card, Suit } from '@tongzhuo/core-shared'
 import type { HuimingPlayer, HuimingState } from './types'
 
 /** 四种标准花色（不含 Joker） */

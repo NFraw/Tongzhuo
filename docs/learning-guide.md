@@ -1,6 +1,6 @@
 # 技术栈学习指南（实用导向）
 
-> 本文档面向有 C/C++/Java 基础的开发者，通过"欢乐卡牌"项目学习 TypeScript、React、Node.js、Socket.IO、PixiJS、GSAP、Electron。
+> 本文档面向有 C/C++/Java 基础的开发者，通过 Tongzhuo 项目学习 TypeScript、React、Node.js、Socket.IO、PixiJS、GSAP、Electron。
 >
 > 阅读本文档前，建议先通读项目中已注释的核心代码文件。
 
@@ -225,7 +225,7 @@ export class RoomManager { ... }
 
 // 导入（类似 Java 的 import）
 import { createRoom } from './room-manager'
-import type { Card } from '@huiming/core-shared'  // type-only import
+import type { Card } from '@tongzhuo/core-shared'  // type-only import
 ```
 
 #### npm + workspaces

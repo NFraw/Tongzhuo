@@ -30,8 +30,8 @@
  */
 import { Application, Container, Sprite, Graphics } from 'pixi.js'
 import { gsap } from 'gsap'
-import type { Card } from '@huiming/core-shared'
-import { BaseGameRenderer, SpritePool, getCardBackTexture, getCardGlowTexture, getTableTexture, textureForCard, prewarmAllCards } from '@huiming/core-client/renderer'
+import type { Card } from '@tongzhuo/core-shared'
+import { BaseGameRenderer, SpritePool, getCardBackTexture, getCardGlowTexture, getTableTexture, textureForCard, prewarmAllCards } from '@tongzhuo/core-client/renderer'
 import type { LandlordClientState, PlayedCards } from '../../types'
 import { computeLayout, type LayoutResult, type CardSlot } from './layout'
 

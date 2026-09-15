@@ -1,7 +1,7 @@
 // packages/core/server/__tests__/plugin-loader.test.ts
 import { describe, it, expect } from 'vitest'
 import { PluginLoader } from '../plugin-loader'
-import type { GameServerPlugin } from '@huiming/core-shared'
+import type { GameServerPlugin } from '@tongzhuo/core-shared'
 
 const mockPlugin: GameServerPlugin = {
   id: 'test',

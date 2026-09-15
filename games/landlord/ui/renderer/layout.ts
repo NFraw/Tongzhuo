@@ -13,7 +13,7 @@
  *   - computeLayout()：主计算函数，调整各区域的位置和间距
  *   - zones：三个垂直区域（顶部对手区、中央出牌区、底部手牌区）
  */
-import { CARD_W, CARD_H, CARD_TEX_W } from '@huiming/core-client/renderer'
+import { CARD_W, CARD_H, CARD_TEX_W } from '@tongzhuo/core-client/renderer'
 export { CARD_W, CARD_H }
 
 // ─── 响应式断点 ────────────────────────────────────────────────────────────

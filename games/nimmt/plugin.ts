@@ -14,7 +14,7 @@
  *   room:start 调用 createInitialState，broadcastState 调用 getClientState，
  *   game:action 后调用 checkGameEnd。
  */
-import type { GameServerPlugin } from '@huiming/core-shared'
+import type { GameServerPlugin } from '@tongzhuo/core-shared'
 import { buildDeck, createNimmtGame, selectCard, chooseRow } from './engine'
 import type { NimmtState, NimmtClientState } from './types'
 

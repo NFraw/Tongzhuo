@@ -1,5 +1,5 @@
 import path from 'path'
-import { startServer } from '@huiming/core-server'
+import { startServer } from '@tongzhuo/core-server'
 import { huimingServerPlugin } from 'huiming/plugin'
 import { landlordServerPlugin } from 'landlord/plugin'
 import { nimmtServerPlugin } from 'nimmt/plugin'

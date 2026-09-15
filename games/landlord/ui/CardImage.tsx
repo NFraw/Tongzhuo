@@ -1,4 +1,4 @@
-import type { Card } from '@huiming/core-shared'
+import type { Card } from '@tongzhuo/core-shared'
 
 const SUIT_COLORS: Record<string, string> = {
   hearts: '#cc2222', diamonds: '#cc2222',

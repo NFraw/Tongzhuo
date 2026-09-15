@@ -30,8 +30,8 @@ import { PluginLoader } from './plugin-loader'
 import { logger } from './logger'
 import { UserStore } from './user-store'
 import { ServerConfig } from './server-config'
-import type { RoomPlayer, RoomSummary } from '@huiming/core-shared'
-import { AuthErrors, PROTOCOL_VERSION, isCompatible } from '@huiming/core-shared'
+import type { RoomPlayer, RoomSummary } from '@tongzhuo/core-shared'
+import { AuthErrors, PROTOCOL_VERSION, isCompatible } from '@tongzhuo/core-shared'
 
 /** 操作频率限制：同一玩家两次操作间隔不得少于 100ms，防止刷屏/作弊 */
 const ACTION_RATE_LIMIT_MS = 100

@@ -1,7 +1,7 @@
 // games/nimmt/ui/NimmtGame.tsx — v1.3
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import type { GameComponentProps, Card } from '@huiming/core-shared'
-import { useAudio } from '@huiming/core-client/hooks'
+import type { GameComponentProps, Card } from '@tongzhuo/core-shared'
+import { useAudio } from '@tongzhuo/core-client/hooks'
 import { NimmtCard } from './NimmtCard'
 import type { NimmtClientState } from '../types'
 import './styles.css'

@@ -1,5 +1,5 @@
 {
-  "name": "huiming",
+  "name": "tongzhuo",
   "private": true,
   "workspaces": [
     "packages/core/*",
@@ -16,7 +16,7 @@
     "server": "npm -w server run start",
     "desktop": "npm -w desktop run start",
     "desktop:build": "npm -w client run build && npm -w desktop run build",
-    "test": "npm -w @huiming/core-server run test && npm -w huiming run test"
+    "test": "npm -w @tongzhuo/core-server run test && npm -w huiming run test"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

@@ -1,5 +1,5 @@
 // packages/core/server/plugin-loader.ts
-import type { GameServerPlugin } from '@huiming/core-shared'
+import type { GameServerPlugin } from '@tongzhuo/core-shared'
 
 export class PluginLoader {
   private plugins = new Map<string, GameServerPlugin>()

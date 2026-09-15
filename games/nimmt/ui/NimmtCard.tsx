@@ -1,5 +1,5 @@
 // games/nimmt/ui/NimmtCard.tsx — v1.3
-import type { Card } from '@huiming/core-shared'
+import type { Card } from '@tongzhuo/core-shared'
 import { cattleHeads } from '../engine'
 
 interface NimmtCardProps {

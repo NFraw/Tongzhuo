@@ -1,5 +1,5 @@
 // games/huiming/ui/client-plugin.ts
-import type { GameClientPlugin } from '@huiming/core-shared'
+import type { GameClientPlugin } from '@tongzhuo/core-shared'
 import { HuimingGame } from './HuimingGame'
 
 export const huimingClientPlugin: GameClientPlugin = {

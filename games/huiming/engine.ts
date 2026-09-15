@@ -12,7 +12,7 @@
  *   - createHuimingBoard()：棋盘大小（当前 5×5）
  *   - flipNeighbors()：翻开邻居的范围（当前上下左右 4 格）
  */
-import { createDeck, shuffleDeck, type Card } from '@huiming/core-shared'
+import { createDeck, shuffleDeck, type Card } from '@tongzhuo/core-shared'
 import type { HuimingBoard, HuimingCell, HuimingPlayer, HuimingState } from './types'
 
 /**

@@ -1,5 +1,5 @@
 {
-  "name": "@huiming/server",
+  "name": "@tongzhuo/server",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -7,7 +7,7 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
-    "@huiming/core-server": "*",
+    "@tongzhuo/core-server": "*",
     "huiming": "*",
     "express": "^4.21.0",
     "socket.io": "^4.8.0"

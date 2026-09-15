@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { Card } from '@huiming/core-shared'
+import type { Card } from '@tongzhuo/core-shared'
 import { getHandType, compareHands, canBeat, landlordRank } from '../hand'
 import type { PlayedCards } from '../types'
 

@@ -22,7 +22,7 @@
  *   - CARD_W / CARD_H：卡牌逻辑尺寸（CSS 像素）
  */
 import { Texture } from 'pixi.js'
-import type { Card } from '@huiming/core-shared'
+import type { Card } from '@tongzhuo/core-shared'
 
 /** 卡牌逻辑宽度（CSS 像素） */
 export const CARD_W = 72

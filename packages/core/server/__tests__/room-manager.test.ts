@@ -1,7 +1,7 @@
 // packages/core/server/__tests__/room-manager.test.ts
 import { describe, it, expect } from 'vitest'
 import { RoomManager } from '../room-manager'
-import type { RoomPlayer } from '@huiming/core-shared'
+import type { RoomPlayer } from '@tongzhuo/core-shared'
 
 function createTestPlayer(id: string, socketId?: string): RoomPlayer {
   return {

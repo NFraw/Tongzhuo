@@ -14,7 +14,7 @@
  *   - 修改 rules.ts 中的 checkWinner() 改变胜利条件
  *   - 修改 engine.ts 中的 flipNeighbors() 改变翻开邻居的范围
  */
-import type { Card } from '@huiming/core-shared'
+import type { Card } from '@tongzhuo/core-shared'
 
 /** 花色类型（不含 Joker，Joker 通过 suit 字段前缀 'joker' 判断） */
 export type HuimingSuit = 'hearts' | 'spades' | 'diamonds' | 'clubs'

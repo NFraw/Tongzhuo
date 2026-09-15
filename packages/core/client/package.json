@@ -1,9 +1,9 @@
 {
-  "name": "@huiming/core-client",
+  "name": "@tongzhuo/core-client",
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "@huiming/core-shared": "*",
+    "@tongzhuo/core-shared": "*",
     "gsap": "^3.15.0",
     "pixi.js": "^8.20.1",
     "react": "^19.0.0",

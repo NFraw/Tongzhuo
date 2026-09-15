@@ -19,7 +19,7 @@
  *   在 getHandType() 函数中添加新的 if 分支，并在 types.ts 的 HandType 中加上新类型。
  *   然后在 rules.ts 的 isValidPlay() 中确保新牌型被正确校验。
  */
-import type { Card } from '@huiming/core-shared'
+import type { Card } from '@tongzhuo/core-shared'
 import type { HandType, PlayedCards } from './types'
 
 /**

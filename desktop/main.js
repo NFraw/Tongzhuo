@@ -26,7 +26,7 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    title: '欢乐卡牌 - 联机游戏平台',
+    title: 'Tongzhuo - 在线多人游戏平台',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

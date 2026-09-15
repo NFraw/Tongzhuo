@@ -18,8 +18,8 @@
  */
 import crypto from 'crypto'
 import type Database from 'better-sqlite3'
-import type { UserRecord, CoinTransaction } from '@huiming/core-shared'
-import { AuthErrors, AuthValidation } from '@huiming/core-shared'
+import type { UserRecord, CoinTransaction } from '@tongzhuo/core-shared'
+import { AuthErrors, AuthValidation } from '@tongzhuo/core-shared'
 
 /** Token 有效期：2 小时 */
 const TOKEN_EXPIRY_MS = 2 * 60 * 60 * 1000

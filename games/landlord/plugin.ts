@@ -14,7 +14,7 @@
  *   room:start 调用 createInitialState，broadcastState 调用 getClientState，
  *   game:action 后调用 checkGameEnd。
  */
-import type { Card, GameServerPlugin } from '@huiming/core-shared'
+import type { Card, GameServerPlugin } from '@tongzhuo/core-shared'
 import { createLandlordGame } from './engine'
 import { isValidBid, isValidPlay, canPass } from './rules'
 import { getHandType } from './hand'

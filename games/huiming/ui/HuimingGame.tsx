@@ -1,7 +1,7 @@
 // games/huiming/ui/HuimingGame.tsx
 import { useState } from 'react'
-import type { GameComponentProps, Card } from '@huiming/core-shared'
-import { PlayerInfo, CardHand } from '@huiming/core-client/components'
+import type { GameComponentProps, Card } from '@tongzhuo/core-shared'
+import { PlayerInfo, CardHand } from '@tongzhuo/core-client/components'
 import { HuimingBoard } from './HuimingBoard'
 import type { HuimingClientState } from '../types'
 import './styles.css'

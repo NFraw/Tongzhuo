@@ -1,7 +1,7 @@
 {
-  "name": "card-platform-desktop",
+  "name": "tongzhuo-desktop",
   "version": "2.0.0",
-  "description": "欢乐卡牌 - 联机游戏平台桌面版",
+  "description": "Tongzhuo - open-source online multiplayer game platform (desktop client)",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -12,7 +12,7 @@
     "build:linux": "electron-builder --linux"
   },
   "devDependencies": {
-    "@huiming/core-server": "*",
+    "@tongzhuo/core-server": "*",
     "huiming": "*",
     "electron": "^35.0.0",
     "electron-builder": "^26.0.0",

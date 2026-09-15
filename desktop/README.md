@@ -1,17 +1,17 @@
-# 晦明 - 桌面版
+# Tongzhuo - 桌面版
 
-基于 Electron 的晦明卡牌游戏平台桌面客户端。
+基于 Electron 的 Tongzhuo 在线多人游戏平台桌面客户端。
 
 ## 架构
 
 采用 **Electron 壳 + 内嵌服务器** 架构：
 
-- 主进程启动内嵌的 huiming 服务器
-- `@huiming/core-server` 与 `huiming` 插件先用 esbuild 打包成自包含的 `server.bundle.js`，主进程直接 `require` 它
+- 主进程启动内嵌的 Tongzhuo 服务器
+- `@tongzhuo/core-server` 与 `huiming` 插件先用 esbuild 打包成自包含的 `server.bundle.js`，主进程直接 `require` 它
 - 自动分配空闲端口
 - 渲染进程通过 HTTP 加载游戏
 
-> 为什么用 esbuild 打包：`@huiming/core-server` / `huiming` 这些 workspace 包只有 TypeScript 源码、无构建产物，Electron 主进程无法直接 `import` 它们。打包成一个 bundle 后 server 逻辑自包含，运行时无需 node_modules。
+> 为什么用 esbuild 打包：`@tongzhuo/core-server` / `huiming` 这些 workspace 包只有 TypeScript 源码、无构建产物，Electron 主进程无法直接 `import` 它们。打包成一个 bundle 后 server 逻辑自包含，运行时无需 node_modules。
 
 ## 开发
 

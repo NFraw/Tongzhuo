@@ -25,13 +25,13 @@
  *   3. 实现 GameClientPlugin 接口（GameComponent + 可选 renderer）
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useSocket } from '@huiming/core-client/hooks/useSocket'
-import { useGamePlugin, registerClientPluginLoader } from '@huiming/core-client/hooks/useGamePlugin'
-import { useAudio } from '@huiming/core-client/hooks'
+import { useSocket } from '@tongzhuo/core-client/hooks/useSocket'
+import { useGamePlugin, registerClientPluginLoader } from '@tongzhuo/core-client/hooks/useGamePlugin'
+import { useAudio } from '@tongzhuo/core-client/hooks'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AuthScreen } from './components/AuthScreen'
 import { SettingsPage } from './components/SettingsPage'
-import type { ClientState, RoomSummary } from '@huiming/core-shared'
+import type { ClientState, RoomSummary } from '@tongzhuo/core-shared'
 
 // 注册游戏插件懒加载器（import() 动态导入，首屏不加载游戏代码）
 registerClientPluginLoader('huiming', () =>
@@ -583,8 +583,8 @@ function AppInner() {
   if (phase === 'connect') {
     return (
       <div className="lobby">
-        <h1>欢乐卡牌</h1>
-        <p className="lobby-subtitle">联机卡牌游戏平台</p>
+        <h1>Tongzhuo</h1>
+        <p className="lobby-subtitle">派对 · 纸牌 · 棋盘 · 社交游戏</p>
         <div className="connect-panel">
           <h2>连接服务器</h2>
           {connectError && <div className="error-message">连接失败: {connectError}</div>}
@@ -641,7 +641,7 @@ function AppInner() {
     return (
       <div className="lobby">
         <div className="lobby-header">
-          <h1>欢乐卡牌</h1>
+          <h1>Tongzhuo</h1>
           {auth.user && (
             <div className="lobby-user-bar">
               <LobbyAvatar id={auth.user.avatarId} size={28} />

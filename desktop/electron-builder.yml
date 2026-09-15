@@ -1,5 +1,5 @@
-appId: com.cardplatform.desktop
-productName: 欢乐卡牌
+appId: com.tongzhuo.desktop
+productName: Tongzhuo
 directories:
   output: dist
 files:

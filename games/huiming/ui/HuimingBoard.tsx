@@ -1,5 +1,5 @@
 // games/huiming/ui/HuimingBoard.tsx
-import { CardGrid, type GridCell } from '@huiming/core-client/components'
+import { CardGrid, type GridCell } from '@tongzhuo/core-client/components'
 import type { HuimingClientState } from '../types'
 
 interface HuimingBoardProps {

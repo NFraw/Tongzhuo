@@ -12,7 +12,7 @@
  *   - 修改 dealCards() 改变发牌方式
  *   - 修改 createLandlordGame() 改变初始状态结构
  */
-import { createDeck, shuffleDeck, type Card } from '@huiming/core-shared'
+import { createDeck, shuffleDeck, type Card } from '@tongzhuo/core-shared'
 import type { LandlordState, LandlordPlayer } from './types'
 
 /**

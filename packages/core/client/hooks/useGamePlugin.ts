@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import type { GameClientPlugin } from '@huiming/core-shared'
+import type { GameClientPlugin } from '@tongzhuo/core-shared'
 
 const plugins = new Map<string, GameClientPlugin>()
 const pluginLoaders = new Map<string, () => Promise<GameClientPlugin>>()

@@ -9,8 +9,8 @@ import { setupSocketFramework } from './socket-framework'
 import { getDb } from './db'
 import { UserStore } from './user-store'
 import { ServerConfig } from './server-config'
-import { AuthErrors, AuthValidation } from '@huiming/core-shared'
-import type { GameServerPlugin } from '@huiming/core-shared'
+import { AuthErrors, AuthValidation } from '@tongzhuo/core-shared'
+import type { GameServerPlugin } from '@tongzhuo/core-shared'
 
 export interface ServerOptions {
   port?: number

@@ -1,4 +1,4 @@
-import type { Card } from '@huiming/core-shared'
+import type { Card } from '@tongzhuo/core-shared'
 import { PlayingCard } from './PlayingCard'
 
 interface CardHandProps {
