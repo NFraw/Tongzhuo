@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# 同一分支有新的推送时，取消上一轮还在跑的检查
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 桌面端不在 CI 构建，跳过 Electron 二进制下载以缩短安装时间
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 与开发机保持一致（Node 24），避免本地过、CI 不过
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run test
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      # client 的 build 脚本是 `tsc && vite build`，因此这一步同时是
+      # 客户端类型检查门禁（根目录 tsconfig 缺 jsx，不能当全仓库类型检查用）
+      - run: npm -w client run build

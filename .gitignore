@@ -4,3 +4,4 @@ server/public
 server/data
 .superpowers
 .worktrees
+.idea

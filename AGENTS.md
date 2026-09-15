@@ -29,6 +29,35 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 3. **收尾前的独立验证** —— 声明完成前必须实际跑测试 / 构建。自己跑过的检查不算独立验证。
 4. **持久记忆 / 笔记的维护** —— 记录用户偏好、被否决的方案、外部系统指针。
 
+## 协作流程（Pull Request）
+
+`main` 受分支保护，**任何改动都必须走 PR，禁止直接推送**。
+
+1. 从 `main` 拉分支：`git switch -c feature/xxx main`
+2. 开发并本地跑通下面的两门禁
+3. 推送分支，在 GitHub 发起 PR，目标分支 `main`
+4. CI 全绿 + 至少 1 人 Approve 才能合并；用 **Squash and merge** 保持 `main` 历史线性
+
+### 合并门禁
+
+| 检查（CI check 名） | 命令 |
+| --- | --- |
+| `test` | `npm run test` |
+| `build` | `npm -w client run build` |
+
+> 根目录 `tsconfig.json` 只提供基础编译选项且没有 `jsx`，**不要**把 `npx tsc --noEmit` 当全仓库类型检查（必然报 JSX 错误）。真正的类型检查在 `client` 的 build 脚本里（`tsc && vite build`）。
+
+### PR 审查规则（Codex 与人工审查共用）
+
+按优先级检查以下各项，命中即作为高优先级问题提出：
+
+- **游戏规则正确性** —— 改动 `games/huiming/rules.ts` / `engine.ts` 必须带测试（`__tests__/rules.test.ts`、`engine.test.ts`）；规则语义变更必须同步 `docs/huiming-rules.md`（及英文版 `docs/huiming-rules-en.md`）。
+- **接口契约** —— 改 `GameServerPlugin` 的方法签名（`packages/core/shared/plugin.ts`）属破坏性改动，PR 描述里必须写明影响面。
+- **信息隐藏** —— `getClientState()` 是脱敏边界，任何把其他玩家手牌、暗牌、牌堆顺序透给客户端的改动都是严重问题。
+- **鉴权与校验** —— 新增 socket 事件必须走 `packages/core/server/socket-framework.ts` 的房间成员 / `room.phase` 校验，不得绕过或自行放宽。
+- **秘密与隐私** —— 禁止明文记录或返回密码、token（`user-store.ts` 是 scrypt + HMAC）；日志里不得出现用户隐私数据。
+- **测试缺失** —— 新增逻辑分支缺对应测试视为未完成，应在 PR 上要求补充。
+
 ## Commands
 
 ```bash
