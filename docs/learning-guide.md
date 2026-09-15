@@ -716,7 +716,7 @@ on('room:created', (data) => {
 | 修改出牌动画 | `LandlordRenderer.ts` → `syncLastPlay()` |
 | 修改游戏规则 | `games/*/rules.ts` + `engine.ts` |
 | 添加新游戏 | 参考 `games/landlord/` 的结构 |
-| 修改 BGM | `useAudio.ts` + `public/audio/bgm/` |
+| 启用 BGM/语音 | `useAudio.ts` 的 `AUDIO_BUNDLED` + `public/audio/` |
 | 修改服务器配置 | `server-config.ts` |
 | 修改用户系统 | `user-store.ts` |
 | 修改认证流程 | `socket-framework.ts` 中间件 |

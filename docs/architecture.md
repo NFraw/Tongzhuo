@@ -777,14 +777,14 @@ registerClientPlugin(myClientPlugin)
 | 游戏规则 | | ✓ |
 | 状态机 | | ✓ |
 | 游戏 UI | | ✓ |
-| 特殊牌面素材 | | ✓ |
+| 牌面绘制 | | ✓ |
 
 ---
 
 ## 9. 目录结构
 
 ```
-huiming/
+tongzhuo/
 ├── package.json                         # monorepo 根配置
 ├── tsconfig.json                        # TypeScript 根配置
 ├── .gitignore
@@ -841,8 +841,6 @@ huiming/
 │   ├── vite.config.ts                   #   Vite 配置
 │   ├── tsconfig.json
 │   ├── package.json
-│   ├── public/
-│   │   └── assets/                      #   静态牌面素材
 │   └── src/
 │       ├── main.tsx                     #   React 入口
 │       ├── App.tsx                      #   主应用（大厅 + 游戏）
@@ -854,13 +852,6 @@ huiming/
 │   ├── package.json
 │   └── src/
 │       └── index.ts                     #   服务器入口
-│
-├── assets/                              # 原始牌面素材
-│   ├── JOKER.png
-│   ├── 红桃.png
-│   ├── 黑桃.png
-│   ├── 方块.png
-│   └── 梅花.png
 │
 └── docs/                                # 文档
     ├── architecture.md                  #   本文档

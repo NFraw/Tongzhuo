@@ -100,7 +100,7 @@ export interface GameComponentProps {
  * 游戏插件的基础信息（服务器和客户端共用）。
  *
  * @property id          - 游戏唯一标识，如 'landlord'、'huiming'、'nimmt'
- * @property name        - 游戏显示名称，如 '欢乐斗地主'
+ * @property name        - 游戏显示名称，如 '斗地主'
  * @property description - 游戏简介
  * @property minPlayers  - 最少玩家数
  * @property maxPlayers  - 最多玩家数

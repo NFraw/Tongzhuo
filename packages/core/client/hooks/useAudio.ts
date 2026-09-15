@@ -40,6 +40,20 @@ export type BgmScene = 'lobby' | 'playing' | 'exciting' | 'victory' | 'defeat'
 const BASE_AUDIO = 'audio'
 const BGM_EXT = '.mp3'
 
+/**
+ * 仓库是否随包分发音频文件。
+ *
+ * 当前为 false：语音与背景音乐来自第三方版权素材，已从仓库移除，因此
+ * client/public/audio/ 下没有任何文件。此时所有播放调用直接返回，既不请求
+ * 也不报错，游戏逻辑完全不受影响，只是没有声音。
+ *
+ * 想启用音频：
+ *   1. 准备你有权使用的音频文件
+ *   2. 放到 client/public/audio/bgm/（背景音乐）与 client/public/audio/voice/（语音）
+ *   3. 把这里改成 true —— 下面的 URL 映射无需改动
+ */
+const AUDIO_BUNDLED = false
+
 /** BGM 场景 → 文件路径映射 */
 const BGM_URLS: Record<BgmScene, string> = {
   lobby: `${BASE_AUDIO}/bgm/huaijiu_lobby${BGM_EXT}`,
@@ -101,6 +115,7 @@ function getSceneUrl(scene: BgmScene | string): string {
  * 预加载所有 BGM 文件，避免切换时加载延迟
  */
 export function preloadBgmFiles(): void {
+  if (!AUDIO_BUNDLED) return
   const allUrls = [...Object.values(BGM_URLS), ...Object.values(BGM_URLS_COMPAT)]
   allUrls.forEach(url => {
     const audio = new Audio()
@@ -182,6 +197,7 @@ export function getCurrentScene(): BgmScene | null {
  *   playVoice('special_bomb')   // 播放炸弹音效（自动加 .mp3）
  */
 export function playVoice(name: string): void {
+  if (!AUDIO_BUNDLED) return
   const file = name.includes('.') ? name : `${name}.mp3`
   try {
     const el = new Audio(resolveUrl(`voice/${file}`))
@@ -203,6 +219,7 @@ function killBgmFades(): void {
  * 播放 BGM（内部函数）
  */
 function playBgm(scene: BgmScene | null): void {
+  if (!AUDIO_BUNDLED) return
   if (!scene) {
     // 停止 BGM（带淡出效果）
     killBgmFades()

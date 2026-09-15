@@ -95,7 +95,7 @@ function getClientState(state: LandlordState, playerId: string): LandlordClientS
  */
 export const landlordServerPlugin: GameServerPlugin<LandlordState, LandlordClientState> = {
   id: 'landlord',
-  name: '欢乐斗地主',
+  name: '斗地主',
   description: '经典三人扑克牌游戏',
   minPlayers: 3,
   maxPlayers: 3,
